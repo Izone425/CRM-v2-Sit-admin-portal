@@ -1,0 +1,234 @@
+<div class="p-6">
+    <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+        {{-- Account Information --}}
+        <div class="p-4 border border-gray-200 rounded-lg bg-gray-50">
+            <div class="flex items-center justify-between mb-4">
+                <h4 class="flex items-center text-sm font-semibold tracking-wider text-gray-900 uppercase">
+                    <svg class="w-5 h-5 mr-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                    </svg>
+                    Account Information
+                </h4>
+                {{-- @if(!$editingAccountInfo)
+                    <button
+                        style="--c-400:var(--primary-400);--c-500:var(--primary-500);--c-600:var(--primary-600);"
+                        class="fi-btn relative grid-flow-col items-center justify-center font-semibold outline-none transition duration-75 focus-visible:ring-2 rounded-lg fi-color-custom fi-btn-color-primary fi-color-primary fi-size-md fi-btn-size-md gap-1.5 px-3 py-2 text-sm inline-grid shadow-sm bg-custom-600 text-white hover:bg-custom-500 focus-visible:ring-custom-500/50 dark:bg-custom-500 dark:hover:bg-custom-400 dark:focus-visible:ring-custom-400/50"
+                        type="button"
+                        wire:loading.attr="disabled"
+                        wire:click="editAccountInfo"
+                    >
+                        <svg wire:loading.remove.delay.default="1" wire:target="editAccountInfo" class="w-5 h-5 text-white transition duration-75 fi-btn-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125"></path>
+                        </svg>
+                        <svg fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-white transition duration-75 animate-spin fi-btn-icon" wire:loading.delay.default="" wire:target="editAccountInfo">
+                            <path clip-rule="evenodd" d="M12 19C15.866 19 19 15.866 19 12C19 8.13401 15.866 5 12 5C8.13401 5 5 8.13401 5 12C5 15.866 8.13401 19 12 19ZM12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" fill-rule="evenodd" fill="currentColor" opacity="0.2"></path>
+                            <path d="M2 12C2 6.47715 6.47715 2 12 2V5C8.13401 5 5 8.13401 5 12H2Z" fill="currentColor"></path>
+                        </svg>
+                        <span class="fi-btn-label">Edit</span>
+                    </button>
+                @endif --}}
+            </div>
+
+            @if(!$editingAccountInfo)
+                {{-- View Mode --}}
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm text-gray-600">Branch Info</span>
+                        <span class="text-sm font-medium text-gray-900">{{ $selectedBranch }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-sm text-gray-600">Register Date</span>
+                        <span class="text-sm font-medium text-gray-900">{{ $profileData['account_info']['register_date'] }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-sm text-gray-600">Last Login Date</span>
+                        <span class="text-sm font-medium text-gray-900">{{ $profileData['account_info']['last_login_date'] }}</span>
+                    </div>
+                </div>
+            @else
+                {{-- Edit Mode --}}
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm text-gray-600">Branch Info</span>
+                        <select wire:model="selectedBranch" class="text-sm font-medium text-gray-900 border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                            <option value="Timetec Cloud Sdn Bhd">Timetec Cloud Sdn Bhd</option>
+                            <option value="Timetec Penang Sdn Bhd">Timetec Penang Sdn Bhd</option>
+                        </select>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-sm text-gray-600">Register Date</span>
+                        <span class="text-sm font-medium text-gray-900">{{ $profileData['account_info']['register_date'] }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-sm text-gray-600">Last Login Date</span>
+                        <span class="text-sm font-medium text-gray-900">{{ $profileData['account_info']['last_login_date'] }}</span>
+                    </div>
+                </div>
+                <div class="flex gap-2 mt-4">
+                    <button
+                        style="--c-400:var(--primary-400);--c-500:var(--primary-500);--c-600:var(--primary-600);"
+                        class="fi-btn relative grid-flow-col items-center justify-center font-semibold outline-none transition duration-75 focus-visible:ring-2 rounded-lg fi-color-custom fi-btn-color-primary fi-color-primary fi-size-md fi-btn-size-md gap-1.5 px-3 py-2 text-sm inline-grid shadow-sm bg-custom-600 text-white hover:bg-custom-500 focus-visible:ring-custom-500/50 dark:bg-custom-500 dark:hover:bg-custom-400 dark:focus-visible:ring-custom-400/50"
+                        type="button"
+                        wire:loading.attr="disabled"
+                        wire:click="saveAccountInfo"
+                    >
+                        <span class="fi-btn-label">Save Changes</span>
+                    </button>
+                    <button
+                        class="fi-btn relative grid-flow-col items-center justify-center font-semibold outline-none transition duration-75 focus-visible:ring-2 rounded-lg fi-size-md fi-btn-size-md gap-1.5 px-3 py-2 text-sm inline-grid shadow-sm bg-white text-gray-950 hover:bg-gray-50 dark:bg-white/5 dark:text-white dark:hover:bg-white/10 ring-1 ring-gray-950/10 dark:ring-white/20"
+                        type="button"
+                        wire:click="cancelAccountInfo"
+                    >
+                        <span class="fi-btn-label">Cancel</span>
+                    </button>
+                </div>
+            @endif
+        </div>
+
+        {{-- Backend Information (Read-only - no edit button) --}}
+        <div class="p-4 border border-gray-200 rounded-lg bg-gray-50">
+            <h4 class="flex items-center mb-4 text-sm font-semibold tracking-wider text-gray-900 uppercase">
+                <svg class="w-5 h-5 mr-2 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"></path>
+                </svg>
+                Backend Information
+            </h4>
+            <div class="space-y-3">
+                <div class="flex justify-between">
+                    <span class="text-sm text-gray-600">Backend Company Id</span>
+                    <span class="text-sm font-medium text-gray-900">{{ $profileData['backend_info']['company_id'] }}</span>
+                </div>
+            </div>
+        </div>
+
+        {{-- Billing Information --}}
+        <div class="p-4 border border-gray-200 rounded-lg bg-gray-50">
+            <div class="flex items-center justify-between mb-4">
+                <h4 class="flex items-center text-sm font-semibold tracking-wider text-gray-900 uppercase">
+                    <svg class="w-5 h-5 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path>
+                    </svg>
+                    Billing Information
+                </h4>
+                {{-- @if(!$editingBillingInfo)
+                    <button
+                        style="--c-400:var(--primary-400);--c-500:var(--primary-500);--c-600:var(--primary-600);"
+                        class="fi-btn relative grid-flow-col items-center justify-center font-semibold outline-none transition duration-75 focus-visible:ring-2 rounded-lg fi-color-custom fi-btn-color-primary fi-color-primary fi-size-md fi-btn-size-md gap-1.5 px-3 py-2 text-sm inline-grid shadow-sm bg-custom-600 text-white hover:bg-custom-500 focus-visible:ring-custom-500/50 dark:bg-custom-500 dark:hover:bg-custom-400 dark:focus-visible:ring-custom-400/50"
+                        type="button"
+                        wire:loading.attr="disabled"
+                        wire:click="editBillingInfo"
+                    >
+                        <svg wire:loading.remove.delay.default="1" wire:target="editBillingInfo" class="w-5 h-5 text-white transition duration-75 fi-btn-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125"></path>
+                        </svg>
+                        <svg fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-white transition duration-75 animate-spin fi-btn-icon" wire:loading.delay.default="" wire:target="editBillingInfo">
+                            <path clip-rule="evenodd" d="M12 19C15.866 19 19 15.866 19 12C19 8.13401 15.866 5 12 5C8.13401 5 5 8.13401 5 12C5 15.866 8.13401 19 12 19ZM12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" fill-rule="evenodd" fill="currentColor" opacity="0.2"></path>
+                            <path d="M2 12C2 6.47715 6.47715 2 12 2V5C8.13401 5 5 8.13401 5 12H2Z" fill="currentColor"></path>
+                        </svg>
+                        <span class="fi-btn-label">Edit</span>
+                    </button>
+                @endif --}}
+            </div>
+
+            @if(!$editingBillingInfo)
+                {{-- View Mode --}}
+                <div class="space-y-3">
+                    <div>
+                        <span class="text-sm text-gray-600">Company Name</span>
+                        <p class="mt-1 text-sm font-medium text-gray-900">{{ $billingCompanyName ?? '-' }}</p>
+                    </div>
+                    <div>
+                        <span class="text-sm text-gray-600">PIC Name</span>
+                        <p class="mt-1 text-sm font-medium text-gray-900">{{ $billingPicName ?? '-' }}</p>
+                    </div>
+                    <div>
+                        <span class="text-sm text-gray-600">Phone</span>
+                        <p class="mt-1 text-sm font-medium text-gray-900">{{ $billingPhone ?? '-' }}</p>
+                    </div>
+                    <div>
+                        <span class="text-sm text-gray-600">Email</span>
+                        <p class="mt-1 text-sm font-medium text-gray-900">{{ $billingEmail ?? '-' }}</p>
+                    </div>
+                </div>
+            @else
+                {{-- Edit Mode --}}
+                <div class="space-y-3">
+                    <div>
+                        <label class="block mb-1 text-sm text-gray-600">Company Name</label>
+                        <input type="text" wire:model="billingCompanyName" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block mb-1 text-sm text-gray-600">PIC Name</label>
+                        <input type="text" wire:model="billingPicName" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block mb-1 text-sm text-gray-600">Phone</label>
+                        <input type="text" wire:model="billingPhone" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block mb-1 text-sm text-gray-600">Email</label>
+                        <input type="email" wire:model="billingEmail" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                </div>
+                <div class="flex gap-2 mt-4">
+                    <button
+                        style="--c-400:var(--primary-400);--c-500:var(--primary-500);--c-600:var(--primary-600);"
+                        class="fi-btn relative grid-flow-col items-center justify-center font-semibold outline-none transition duration-75 focus-visible:ring-2 rounded-lg fi-color-custom fi-btn-color-primary fi-color-primary fi-size-md fi-btn-size-md gap-1.5 px-3 py-2 text-sm inline-grid shadow-sm bg-custom-600 text-white hover:bg-custom-500 focus-visible:ring-custom-500/50 dark:bg-custom-500 dark:hover:bg-custom-400 dark:focus-visible:ring-custom-400/50"
+                        type="button"
+                        wire:loading.attr="disabled"
+                        wire:click="saveBillingInfo"
+                    >
+                        <span class="fi-btn-label">Save Changes</span>
+                    </button>
+                    <button
+                        class="fi-btn relative grid-flow-col items-center justify-center font-semibold outline-none transition duration-75 focus-visible:ring-2 rounded-lg fi-size-md fi-btn-size-md gap-1.5 px-3 py-2 text-sm inline-grid shadow-sm bg-white text-gray-950 hover:bg-gray-50 dark:bg-white/5 dark:text-white dark:hover:bg-white/10 ring-1 ring-gray-950/10 dark:ring-white/20"
+                        type="button"
+                        wire:click="cancelBillingInfo"
+                    >
+                        <span class="fi-btn-label">Cancel</span>
+                    </button>
+                </div>
+            @endif
+        </div>
+
+        {{-- Customer Credential (Read-only) --}}
+        <div class="p-4 border border-gray-200 rounded-lg bg-gray-50">
+            <h4 class="flex items-center mb-4 text-sm font-semibold tracking-wider text-gray-900 uppercase">
+                <svg class="w-5 h-5 mr-2 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path>
+                </svg>
+                Customer Credential
+            </h4>
+            <div class="space-y-3">
+                <div class="flex justify-between">
+                    <span class="text-sm text-gray-600">Date & Time Creation</span>
+                    <span class="text-sm font-medium text-gray-900">{{ $credentialCreatedAt ?? '-' }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-sm text-gray-600">Sales Person</span>
+                    <span class="text-sm font-medium text-gray-900">{{ $credentialSalesPerson ?? '-' }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-sm text-gray-600">Master Email</span>
+                    <span class="text-sm font-medium text-gray-900">{{ $credentialMasterEmail ?? '-' }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-sm text-gray-600">Password</span>
+                    <span class="text-sm font-medium text-gray-900">{{ $credentialPassword ?? '-' }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-sm text-gray-600">Status</span>
+                    @if($credentialStatus)
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {{ in_array(strtolower($credentialStatus), ['valid', 'active']) ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800' }}">
+                            {{ $credentialStatus }}
+                        </span>
+                    @else
+                        <span class="text-sm font-medium text-gray-900">-</span>
+                    @endif
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+</div>

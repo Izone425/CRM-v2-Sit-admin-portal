@@ -1,0 +1,1912 @@
+@php
+use Carbon\Carbon;
+@endphp
+
+<div>
+    <style>
+        .calendar-container {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 20px;
+            padding: 2rem 2rem 1rem 2rem;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+
+        .calendar-header-section {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 2px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+
+        .calendar-day {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 1rem 0.75rem;
+            min-height: 100px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            border: 2px solid transparent;
+        }
+
+        .calendar-day:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+            background: rgba(255, 255, 255, 1);
+        }
+
+        .calendar-day.other-month {
+            background: rgba(249, 250, 251, 0.7);
+            color: #9ca3af;
+        }
+
+        .calendar-day.today {
+            background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+            border: 2px solid #3b82f6;
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+        }
+
+        .calendar-day.past {
+            background: rgba(243, 244, 246, 0.8);
+            color: #9ca3af;
+            cursor: not-allowed;
+        }
+
+        .calendar-day.weekend {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            border-left: 4px solid #f59e0b;
+        }
+
+        .calendar-day.holiday {
+            background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+            border-left: 4px solid #ef4444;
+        }
+
+        .calendar-day.bookable {
+            background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+            border: 2px solid #22c55e;
+            box-shadow: 0 0 15px rgba(34, 197, 94, 0.2);
+        }
+
+        .calendar-day.bookable:hover {
+            background: linear-gradient(135deg, #bbf7d0 0%, #a7f3d0 100%);
+            transform: translateY(-4px);
+            box-shadow: 0 12px 30px rgba(34, 197, 94, 0.3);
+        }
+
+        .calendar-day.has-meeting {
+            background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
+            border: 2px solid #6366f1;
+            box-shadow: 0 0 20px rgba(99, 102, 241, 0.3);
+        }
+
+        .calendar-day.disabled {
+            background: rgba(243, 244, 246, 0.6);
+            color: #9ca3af;
+            cursor: not-allowed;
+        }
+
+        .day-number {
+            font-weight: 700;
+            font-size: 1.125rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .available-count {
+            font-size: 0.75rem;
+            color: #059669;
+            font-weight: 600;
+            background: rgba(5, 150, 105, 0.1);
+            padding: 0.25rem 0.5rem;
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .meeting-indicator {
+            font-size: 0.75rem;
+            color: #6366f1;
+            font-weight: 600;
+            background: rgba(99, 102, 241, 0.1);
+            padding: 0.25rem 0.5rem;
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .existing-bookings {
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            border: 2px solid #0ea5e9;
+            border-radius: 16px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .booking-card {
+            background: white;
+            border-radius: 12px;
+            padding: 0.5rem;
+            margin-bottom: 1rem;
+            border-left: 4px solid #6366f1;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .booking-card:last-child {
+            margin-bottom: 0;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-pending {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .status-confirmed {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .status-new {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        /* Rest of existing styles remain the same */
+        .calendar-days-header {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 2px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 16px 16px 0 0;
+            overflow: hidden;
+            margin-bottom: 2px;
+        }
+
+        .header-day {
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+            padding: 1rem 0.75rem;
+            text-align: center;
+            font-weight: 700;
+            color: #374151;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-size: 0.875rem;
+        }
+
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 50;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .modal-container {
+            background: white;
+            border-radius: 20px;
+            width: 100%;
+            max-width: 48rem;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            animation: slideUp 0.3s ease-out;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .modal-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 2rem;
+            color: white;
+            border-radius: 20px 20px 0 0;
+        }
+
+        .modal-body {
+            padding: 2rem;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 0.5rem;
+        }
+
+        .form-input,
+        .form-select,
+        .form-textarea {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            font-size: 0.875rem;
+            transition: all 0.2s;
+            background: #fafafa;
+        }
+
+        .form-input:focus,
+        .form-select:focus,
+        .form-textarea:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            outline: none;
+            background: white;
+        }
+
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border-radius: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s;
+            font-size: 0.875rem;
+            min-width: 200px; /* Add minimum width */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+            min-height: 50px; /* Add minimum height for two lines */
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #6b7280;
+            color: white;
+            min-height: 50px; /* Match height */
+        }
+
+        .btn-secondary:hover {
+            background: #4b5563;
+            transform: translateY(-1px);
+        }
+
+        /* Update modal footer to give more space */
+        .modal-footer {
+            padding: 1rem 2rem;
+            border-top: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: flex-end;
+            gap: 1rem;
+            border-radius: 0 0 20px 20px;
+            background: #f8fafc;
+            flex-wrap: wrap; /* Allow wrapping on smaller screens */
+        }
+
+        .session-option {
+            padding: 1.25rem;
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 0.75rem;
+            background: #fafafa;
+        }
+
+        .session-option:hover {
+            border-color: #667eea;
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            transform: translateY(-1px);
+        }
+
+        .session-option.selected {
+            border-color: #667eea;
+            background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.2);
+        }
+
+        .implementer-info {
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            border: 2px solid #3b82f6;
+            border-radius: 16px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            text-align: center;
+        }
+
+        .legend-container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 1.5rem;
+            margin-top: 1.5rem;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .nav-button {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+            padding: 0.75rem;
+            color: #374151;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .nav-button:hover {
+            background: white;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .month-title {
+            color: white;
+            font-weight: 700;
+            font-size: 1.5rem;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .modal-container.max-w-2xl {
+            max-width: 42rem;
+        }
+
+        .progress-step {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem;
+        }
+
+        .progress-step.active {
+            background: #3b82f6;
+            font-weight: 600;
+        }
+
+        .resource-download {
+            transition: all 0.2s ease;
+        }
+
+        .resource-download:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .modal-container {
+            background: white;
+            border-radius: 20px;
+            width: 100%;
+            max-width: 48rem;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            animation: slideUp 0.3s ease-out;
+
+            /* Hide scrollbar for webkit browsers (Chrome, Safari, Edge) */
+            scrollbar-width: none; /* Firefox */
+            -ms-overflow-style: none; /* Internet Explorer 10+ */
+        }
+
+        .modal-container::-webkit-scrollbar {
+            display: none; /* Safari and Chrome */
+        }
+
+        /* Also hide scrollbar for modal body if needed */
+        .modal-body {
+            padding: 1.5rem 2rem 1rem 2rem;
+            scrollbar-width: none; /* Firefox */
+            -ms-overflow-style: none; /* Internet Explorer 10+ */
+        }
+
+        .modal-body::-webkit-scrollbar {
+            display: none; /* Safari and Chrome */
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .btn:disabled:hover {
+            transform: none !important;
+            box-shadow: none !important;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .animate-spin {
+            animation: spin 1s linear infinite;
+        }
+
+        .cancel-button {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s;
+            text-align: center;
+            min-width: 80px;
+        }
+
+        .cancel-button:hover {
+            background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);
+        }
+
+        .cancel-button:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .cancel-reason {
+            font-size: 0.65rem;
+            color: #6b7280;
+            font-style: italic;
+            margin-top: 0.25rem;
+        }
+
+        .modal-header {
+            position: relative; /* Add this to enable absolute positioning for close button */
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 2rem;
+            color: white;
+            border-radius: 20px 20px 0 0;
+        }
+
+        /* Style for the close button */
+        .modal-close-btn {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            border-radius: 50%;
+            width: 2.5rem;
+            height: 2.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            backdrop-filter: blur(10px);
+        }
+
+        .modal-close-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: scale(1.1);
+        }
+
+        .session-option {
+            padding: 1rem 0.75rem; /* Reduce horizontal padding for narrower boxes */
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 0; /* Remove bottom margin since we're using grid gap */
+            background: #fafafa;
+            min-height: 80px; /* Ensure consistent height */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .session-option:hover {
+            border-color: #667eea;
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.2);
+        }
+
+        .session-option.selected {
+            border-color: #667eea;
+            background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+            transform: translateY(-2px);
+        }
+
+        /* Responsive adjustments for smaller screens */
+        @media (max-width: 768px) {
+            .session-grid {
+                grid-template-columns: 1fr; /* Stack vertically on mobile */
+                gap: 1rem;
+            }
+
+            .session-option {
+                padding: 1.25rem; /* Restore padding on mobile */
+            }
+        }
+
+        @media (min-width: 769px) and (max-width: 1024px) {
+            .session-grid {
+                grid-template-columns: repeat(2, 1fr); /* 2 columns on tablets */
+            }
+        }
+
+        .existing-bookings {
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            border: 2px solid #0ea5e9;
+            border-radius: 16px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .bookings-header {
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: between;
+            margin-bottom: 0.5rem;
+            padding: 0.5rem 0;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .bookings-header:hover {
+            background: rgba(59, 130, 246, 0.05);
+            padding: 0.5rem;
+        }
+
+        .collapse-icon {
+            transition: transform 0.1s ease;
+            width: 1.5rem;
+            height: 1.5rem;
+            color: #3b82f6;
+        }
+
+        .collapse-icon.rotated {
+            transform: rotate(180deg);
+        }
+
+        .bookings-list {
+            transition: all 0.2s ease-in-out;
+            overflow: hidden;
+        }
+
+        .bookings-list.collapsed {
+            max-height: 0;
+            opacity: 0;
+            margin: 0;
+        }
+
+        .bookings-list.expanded {
+            max-height: 1000px;
+            opacity: 1;
+        }
+
+        .meeting-indicator.completed {
+            background: rgba(34, 197, 94, 0.1);
+            color: #22c55e;
+            border: 1px solid #22c55e;
+        }
+
+        .modal-close-btn {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            border-radius: 50%;
+            width: 2.5rem;
+            height: 2.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            backdrop-filter: blur(10px);
+            color: white;
+        }
+
+        .modal-close-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: scale(1.1);
+        }
+
+        .help-button {
+            animation: helpButtonPulse 3s ease-in-out infinite;
+        }
+
+        @keyframes helpButtonPulse {
+            0%, 100% {
+                box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4);
+            }
+            50% {
+                box-shadow: 0 0 0 10px rgba(59, 130, 246, 0);
+            }
+        }
+
+        .tutorial-step-indicator {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .tutorial-step-indicator.active {
+            transform: scale(1.2);
+        }
+
+        .tutorial-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 50;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(4px);
+        }
+
+        .tutorial-container {
+            background: white;
+            border-radius: 24px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            width: 100%;
+            max-width: 700px; /* Reduced from 5xl to smaller size */
+            max-height: auto; /* Reduced from 95vh */
+            margin: 1rem;
+            overflow: hidden;
+            transform: scale(1);
+            transition: all 0.3s ease;
+        }
+
+        .tutorial-header {
+            position: relative;
+            padding: 2rem 2rem 1.5rem 2rem; /* Reduced padding */
+            color: white;
+            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 50%, #4f46e5 100%);
+        }
+
+        .tutorial-header-pattern {
+            position: absolute;
+            inset: 0;
+            opacity: 0.1;
+        }
+
+        .tutorial-header-pattern::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 160px;
+            height: 160px;
+            border-radius: 50%;
+            background: linear-gradient(to right, white, transparent);
+            transform: translate(-80px, -80px);
+        }
+
+        .tutorial-header-pattern::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: linear-gradient(to right, white, transparent);
+            transform: translate(60px, 60px);
+        }
+
+        .tutorial-header-content {
+            position: relative;
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+        }
+
+        .tutorial-icon {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 60px;
+            height: 60px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 16px;
+            backdrop-filter: blur(10px);
+            margin-right: 1rem;
+        }
+
+        .tutorial-title {
+            font-size: 1.5rem; /* Reduced from 3xl */
+            font-weight: 700;
+            line-height: 1.2;
+            margin-bottom: 0.5rem;
+        }
+
+        .tutorial-step-info {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-top: 0.5rem;
+        }
+
+        .tutorial-step-badge {
+            padding: 0.25rem 0.75rem;
+            font-size: 0.75rem;
+            font-weight: 500;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+        }
+
+        .tutorial-progress-dots {
+            display: flex;
+            gap: 0.25rem;
+        }
+
+        .tutorial-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            transition: all 0.3s ease;
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .tutorial-dot.active {
+            background: white;
+        }
+
+        .tutorial-close-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+            color: white;
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            border-radius: 12px;
+            backdrop-filter: blur(10px);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .tutorial-close-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: scale(1.1);
+        }
+
+        .tutorial-progress-bar {
+            position: relative;
+            margin-top: 1rem;
+        }
+
+        .tutorial-progress-bg {
+            width: 100%;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+        }
+
+        .tutorial-progress-fill {
+            height: 6px;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            transition: all 0.7s ease-out;
+        }
+
+        .tutorial-body {
+            padding: 1.5rem 2rem; /* Reduced padding */
+            background: linear-gradient(135deg, #f9fafb 0%, white 100%);
+            text-align: center;
+        }
+
+        .tutorial-emoji {
+            font-size: 2rem; /* Reduced from 8xl */
+        }
+
+        .tutorial-emoji.bounce {
+            animation: bounce 2s infinite;
+        }
+
+        .tutorial-step-title {
+            font-size: 1.25rem; /* Reduced from 3xl */
+            font-weight: 700;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .tutorial-step-description {
+            font-size: 1rem; /* Reduced from xl */
+            color: #6b7280;
+            line-height: 1.6;
+            max-width: 500px;
+            margin-left: auto;
+            margin-right: auto;
+            margin-bottom: 1rem;
+        }
+
+        .tutorial-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .tutorial-card {
+            padding: 0.5rem 1rem 0.5rem 1rem;;
+            border: 2px solid;
+            border-radius: 16px;
+            transition: all 0.3s ease;
+        }
+
+        .tutorial-card:hover {
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+        }
+
+        .tutorial-card.blue {
+            background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+            border-color: #3b82f6;
+        }
+
+        .tutorial-card.purple {
+            background: linear-gradient(135deg, #e9d5ff 0%, #ddd6fe 100%);
+            border-color: #8b5cf6;
+        }
+
+        .tutorial-card.green {
+            background: linear-gradient(135deg, #d1fae5 0%, #bbf7d0 100%);
+            border-color: #10b981;
+        }
+
+        .tutorial-tip {
+            padding: 1rem;
+            margin-top: 1rem;
+            border-left: 4px solid #10b981;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+        }
+
+        .tutorial-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem 2rem; /* Reduced padding */
+            border-top: 1px solid #e5e7eb;
+            background: linear-gradient(135deg, #f9fafb 0%, white 100%);
+        }
+
+        .tutorial-btn {
+            display: flex;
+            align-items: center;
+            padding: 0.75rem 1.5rem;
+            border: 2px solid;
+            border-radius: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-decoration: none;
+            font-size: 0.875rem;
+        }
+
+        .tutorial-btn.secondary {
+            color: #6b7280;
+            background: white;
+            border-color: #d1d5db;
+        }
+
+        .tutorial-btn.secondary:hover {
+            background: #f9fafb;
+            border-color: #9ca3af;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .tutorial-btn.primary {
+            color: white;
+            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+            border-color: transparent;
+            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+        }
+
+        .tutorial-btn.primary:hover {
+            background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+            box-shadow: 0 8px 25px rgba(59, 130, 246, 0.4);
+            transform: translateY(-1px);
+        }
+
+        .tutorial-btn.success {
+            color: white;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            border-color: transparent;
+            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+        }
+
+        .tutorial-btn.success:hover {
+            background: linear-gradient(135deg, #059669 0%, #047857 100%);
+            box-shadow: 0 8px 25px rgba(16, 185, 129, 0.4);
+            transform: translateY(-1px);
+        }
+
+        .tutorial-btn svg {
+            width: 1rem;
+            height: 1rem;
+            transition: transform 0.2s ease;
+        }
+
+        .tutorial-btn:hover svg.arrow-right {
+            transform: translateX(2px);
+        }
+
+        .tutorial-btn:hover svg.arrow-left {
+            transform: translateX(-2px);
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 640px) {
+            .tutorial-container {
+                max-width: 95%;
+                margin: 0.5rem;
+            }
+
+            .tutorial-header {
+                padding: 1.5rem 1rem 1rem 1rem;
+            }
+
+            .tutorial-body {
+                padding: 1rem;
+            }
+
+            .tutorial-footer {
+                padding: 1rem;
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+
+            .tutorial-emoji {
+                font-size: 3rem;
+            }
+
+            .tutorial-step-title {
+                font-size: 1.25rem;
+            }
+
+            .tutorial-step-description {
+                font-size: 0.875rem;
+            }
+        }
+
+        @keyframes bounce {
+            0%, 20%, 53%, 80%, 100% {
+                transform: translate3d(0,0,0);
+            }
+            40%, 43% {
+                transform: translate3d(0,-10px,0);
+            }
+            70% {
+                transform: translate3d(0,-5px,0);
+            }
+            90% {
+                transform: translate3d(0,-2px,0);
+            }
+        }
+
+        .help-button-wrapper {
+            position: relative;
+            display: inline-block;
+        }
+
+        .help-tooltip {
+            position: absolute;
+            bottom: 120%;
+            right: 0;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            white-space: nowrap;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(10px);
+            transition: all 0.3s ease;
+            z-index: 60;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+
+            /* Auto-show animation every 10 seconds */
+            animation: tooltipAutoShow 5s infinite;
+        }
+
+        .help-tooltip::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            right: 1rem;
+            border: 6px solid transparent;
+            border-top-color: rgba(0, 0, 0, 0.9);
+        }
+
+        /* Manual hover still works */
+        .help-button-wrapper:hover .help-tooltip {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+            animation: none; /* Pause auto-animation on hover */
+        }
+
+        /* Auto-show animation keyframes */
+        @keyframes tooltipAutoShow {
+            0%, 85% {
+                opacity: 0;
+                visibility: hidden;
+                transform: translateY(10px);
+            }
+            90%, 95% {
+                opacity: 1;
+                visibility: visible;
+                transform: translateY(0);
+            }
+            100% {
+                opacity: 0;
+                visibility: hidden;
+                transform: translateY(10px);
+            }
+        }
+
+        /* Enhanced help button pulse when tooltip shows */
+        .help-button {
+            animation: helpButtonPulse 10s infinite;
+        }
+
+        @keyframes helpButtonPulse {
+            0%, 85% {
+                box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4);
+            }
+            90%, 95% {
+                box-shadow: 0 0 0 10px rgba(59, 130, 246, 0);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4);
+            }
+        }
+
+        /* Pause animations when tutorial modal is open */
+        .tutorial-modal ~ .help-button-wrapper .help-tooltip,
+        .tutorial-modal ~ .help-button-wrapper .help-button {
+            animation-play-state: paused;
+        }
+
+        @media (max-width: 640px) {
+            .help-tooltip {
+                bottom: 110%;
+                right: -50px;
+                left: -50px;
+                text-align: center;
+                white-space: normal;
+            }
+
+            .help-tooltip::after {
+                right: 50%;
+                transform: translateX(50%);
+            }
+        }
+    </style>
+
+    @php
+        $customer = auth()->guard('customer')->user();
+        $hasNewAppointment = \App\Models\ImplementerAppointment::where('lead_id', $customer->lead_id)
+            ->where('status', 'New')
+            ->whereIn('type', ['KICK OFF MEETING SESSION', 'REVIEW SESSION'])
+            ->exists();
+    @endphp
+
+    {{-- @if(!$canScheduleMeeting)
+        <div class="p-4 mb-4 border rounded-lg border-amber-200 bg-amber-50">
+            <div class="flex items-center">
+                <svg class="w-5 h-5 mr-3 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                </svg>
+                <div>
+                    @if($hasNewKickOffMeeting)
+                        <h4 class="font-semibold text-amber-800">Pending Appointment</h4>
+                        <p class="text-sm text-amber-700">You have a pending kick-off meeting. Please wait for it to be completed before scheduling another one.</p>
+                    @else
+                        <h4 class="font-semibold text-amber-800">Meeting Scheduling Disabled</h4>
+                        <p class="text-sm text-amber-700">Please contact your sales representative or support team to enable meeting scheduling for your account.</p>
+                    @endif
+                </div>
+            </div>
+        </div>
+    @endif --}}
+
+    <div class="calendar-container">
+        <!-- Header Section -->
+        <div class="calendar-header-section">
+            <div class="flex items-center justify-between mb-2">
+                <!-- Title Section -->
+                <div class="flex items-center">
+                    <div class="flex items-center justify-center w-12 h-12 mr-4 bg-indigo-600 bg-opacity-20 rounded-xl">
+                        <i class="text-xl text-indigo-600 fas fa-calendar-alt"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-900">{{ $this->getSessionTitle() }}</h2>
+                        <p class="text-gray-600">Choose your preferred date and time</p>
+                    </div>
+                </div>
+
+                <!-- Month Navigation -->
+                <div class="flex items-center gap-4">
+                    <button wire:click="previousMonth" class="nav-button">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                        </svg>
+                    </button>
+
+                    <h3 class="text-xl font-semibold text-gray-700 min-w-[200px] text-center">
+                        {{ $currentDate->format('F Y') }}
+                    </h3>
+
+                    <button wire:click="nextMonth" class="nav-button">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Existing Bookings -->
+            @if($hasExistingBooking)
+                <div class="existing-bookings">
+                    <div class="bookings-header" wire:click="toggleExistingBookings">
+                        <div class="flex items-center justify-between w-full">
+                            <h4 class="text-lg font-semibold text-gray-800">
+                                Your Scheduled Meetings
+                                @if(count($existingBookings) > 1)
+                                    <span class="ml-2 text-sm font-normal text-gray-600">({{ count($existingBookings) }} meetings)</span>
+                                @endif
+                            </h4>
+                            <div class="flex items-center">
+                                <span class="mr-2 text-sm text-gray-600">
+                                    {{ $showExistingBookings ? 'Hide' : 'Show' }}
+                                </span>
+                                <svg class="collapse-icon {{ $showExistingBookings ? 'rotated' : '' }}"
+                                    fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M19 9l-7 7-7-7"></path>
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bookings-list {{ $showExistingBookings ? 'expanded' : 'collapsed' }}">
+                        @foreach($existingBookings as $booking)
+                            <div class="booking-card">
+                                <div class="flex items-center gap-4">
+                                    <!-- Column 1: Date & Time -->
+                                    <div class="flex-1">
+                                        <h5 class="font-semibold text-gray-800">{{ $booking['date'] }}</h5>
+                                    </div>
+
+                                    <div class="flex-1">
+                                        <p class="text-sm text-gray-600">{{ $booking['time'] }}&nbsp;({{ $booking['session'] }})</p>
+                                    </div>
+
+                                    <!-- Column 2: Meeting Details -->
+                                    <div class="flex-1">
+                                        <div class="text-sm text-gray-600">
+                                            {{ $booking['type'] }}
+                                        </div>
+                                    </div>
+
+                                    <!-- Column 3: Actions -->
+                                    <div class="flex flex-col items-end justify-center">
+                                        @php
+                                            $appointmentDate = Carbon::parse($booking['raw_date'])->format('Y-m-d');
+                                            $appointmentDateTime = Carbon::createFromFormat('Y-m-d H:i:s', $appointmentDate . ' ' . $booking['start_time']);
+                                            $now = Carbon::now();
+
+                                            // Updated cancellation logic
+                                            $canCancel = ($booking['status'] === 'New') && // Only allow cancellation if status is 'New'
+                                                        ($appointmentDateTime->isFuture() || ($appointmentDateTime->isToday() && $appointmentDateTime->gt($now)));
+                                        @endphp
+
+                                        @if($canCancel)
+                                            <button wire:click="openCancelModal({{ $booking['id'] }})"
+                                                    class="cancel-button">
+                                                ❌ Cancel
+                                            </button>
+                                        @elseif($booking['status'] === 'Done')
+                                            <div class="px-3 py-2 text-xs font-semibold text-green-700 bg-green-100 rounded-lg">
+                                                ✅ Completed
+                                            </div>
+                                        @else
+                                            <button class="cancel-button" disabled>
+                                                🔒 Cannot Cancel
+                                            </button>
+                                            <div class="cancel-reason">
+                                                @if($appointmentDateTime->isPast())
+                                                    Session already passed
+                                                @else
+                                                    Session started/ongoing
+                                                @endif
+                                            </div>
+                                        @endif
+                                    </div>
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
+        </div>
+
+        <!-- Calendar Days Header -->
+        <div class="calendar-days-header">
+            <div class="header-day">Mon</div>
+            <div class="header-day">Tue</div>
+            <div class="header-day">Wed</div>
+            <div class="header-day">Thu</div>
+            <div class="header-day">Fri</div>
+            <div class="header-day">Sat</div>
+            <div class="header-day">Sun</div>
+        </div>
+
+        <!-- Calendar Grid -->
+        <div class="calendar-grid">
+            @foreach($monthlyData as $dayData)
+                <div class="calendar-day
+                    {{ !$dayData['isCurrentMonth'] ? 'other-month' : '' }}
+                    {{ $dayData['isToday'] ? 'today' : '' }}
+                    {{ $dayData['isPast'] ? 'past' : '' }}
+                    {{ $dayData['isWeekend'] ? 'weekend' : '' }}
+                    {{ $dayData['isPublicHoliday'] ? 'holiday' : '' }}
+                    {{ $dayData['hasCustomerMeeting'] ? 'has-meeting' : '' }}
+                    {{ $dayData['canBook'] ? 'bookable' : '' }}
+                    {{ !$canScheduleMeeting && !$dayData['hasCustomerMeeting'] ? 'disabled' : '' }}
+                    {{ $dayData['isBeyondBookingWindow'] ? 'disabled' : '' }}"
+                    @if($dayData['canBook'])
+                        wire:click="openBookingModal('{{ $dayData['dateString'] }}')"
+                    @elseif($dayData['hasCustomerMeeting'])
+                        @php
+                            // Get the meeting for this specific date
+                            $todaysMeeting = collect($existingBookings)->first(function ($booking) use ($dayData) {
+                                return Carbon::parse($booking['date'])->format('Y-m-d') === $dayData['dateString'];
+                            });
+                        @endphp
+                        @if($todaysMeeting)
+                            wire:click="openMeetingDetailsModal({{ $todaysMeeting['id'] }})"
+                        @endif
+                    @endif>
+
+                    <div class="day-number">{{ $dayData['day'] }}</div>
+
+                    @if($dayData['hasCustomerMeeting'])
+                        @php
+                            // Get the meeting for this specific date to check its status
+                            $todaysMeeting = collect($existingBookings)->first(function ($booking) use ($dayData) {
+                                return Carbon::parse($booking['date'])->format('Y-m-d') === $dayData['dateString'];
+                            });
+                        @endphp
+
+                        @if($todaysMeeting && $todaysMeeting['status'] === 'Done')
+                            <div class="meeting-indicator completed">
+                                ✅ Completed
+                            </div>
+                        @elseif($todaysMeeting)
+                            <div class="meeting-indicator">
+                                📅 Your Meeting
+                            </div>
+                        @endif
+                    @elseif($dayData['isPublicHoliday'])
+                        <div class="text-xs font-semibold text-red-600">🏛️ Holiday</div>
+                    @elseif($dayData['isWeekend'])
+                        <div class="text-xs font-semibold text-amber-600">🎯 Weekend</div>
+                    @elseif($dayData['isPast'])
+                        <div class="text-xs text-gray-500">📅 Past</div>
+                    @elseif($dayData['isBeyondBookingWindow'])
+                        <div class="text-xs text-gray-400">🔒 Beyond Booking Window</div>
+                    @elseif(!$canScheduleMeeting)
+                        <div class="text-xs text-gray-400">
+                            @if($hasNewAppointment)
+                                🔒 Pending Meeting
+                            @else
+                                🔒 Scheduling Disabled
+                            @endif
+                        </div>
+                    @elseif($dayData['availableCount'] > 0)
+                        <div class="available-count">✨ {{ $dayData['availableCount'] }} available</div>
+                    @else
+                        <div class="text-xs font-medium text-red-500">🔒 Fully booked</div>
+                    @endif
+                </div>
+            @endforeach
+        </div>
+
+        <!-- Legend -->
+        <div class="legend-container">
+            <h4 class="mb-3 font-semibold text-gray-700">📋 Calendar Legend</h4>
+            <div class="grid grid-cols-2 gap-4 text-sm md:grid-cols-5">
+                <div class="flex items-center">
+                    <div class="w-4 h-4 mr-2 border-2 border-green-500 rounded bg-gradient-to-br from-green-200 to-green-300"></div>
+                    <span>Available</span>
+                </div>
+                <div class="flex items-center">
+                    <div class="w-4 h-4 mr-2 border-2 border-indigo-500 rounded bg-gradient-to-br from-indigo-200 to-indigo-300"></div>
+                    <span>Your Meeting</span>
+                </div>
+                <div class="flex items-center">
+                    <div class="w-4 h-4 mr-2 rounded bg-gradient-to-br from-amber-100 to-amber-200"></div>
+                    <span>Weekend</span>
+                </div>
+                <div class="flex items-center">
+                    <div class="w-4 h-4 mr-2 rounded bg-gradient-to-br from-red-100 to-red-200"></div>
+                    <span>Holiday</span>
+                </div>
+                <div class="flex items-center">
+                    <div class="w-4 h-4 mr-2 bg-gray-200 rounded"></div>
+                    <span>Unavailable</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cancel Modal -->
+    @if($showCancelModal && $appointmentToCancel)
+        <div class="modal-overlay" wire:click="closeCancelModal">
+            <div class="max-w-md modal-container" wire:click.stop>
+                <div class="text-center modal-header bg-gradient-to-r from-red-500 to-red-600">
+                    <h4 class="mb-2 text-lg font-semibold">Are you sure you want to cancel?</h4>
+                    <p class="text-sm">This action cannot be undone. You'll need to schedule a new appointment after cancelling.</p>
+                </div>
+
+                <div class="modal-body">
+                    <!-- Appointment Details -->
+                    <div class="p-4 mb-6 rounded-lg bg-gray-50">
+                        <h5 class="mb-2 font-medium text-gray-700">Appointment Details:</h5>
+                        <div class="space-y-1 text-sm text-gray-600">
+                            <div><strong>Date:</strong> {{ $appointmentToCancel['date'] }}</div>
+                            <div><strong>Time:</strong> {{ $appointmentToCancel['time'] }}</div>
+                            <div><strong>Session:</strong> {{ $appointmentToCancel['session'] }}</div>
+                            <div><strong>Implementer:</strong> {{ $appointmentToCancel['implementer'] }}</div>
+                        </div>
+                    </div>
+
+                    <!-- Warning Message -->
+                    <div class="p-3 mb-6 border rounded-lg border-amber-200 bg-amber-50">
+                        <div class="flex items-center">
+                            <svg class="w-5 h-5 mr-2 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                            </svg>
+                            <p class="text-sm text-amber-700">
+                                After cancellation, you can immediately schedule a new appointment.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button wire:click="confirmCancelAppointment"
+                            class="btn btn-primary bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700"
+                            wire:loading.attr="disabled" wire:target="confirmCancelAppointment">
+                        <span wire:loading.remove wire:target="confirmCancelAppointment">
+                            ❌ Yes, Cancel Appointment
+                        </span>
+                        <span wire:loading wire:target="confirmCancelAppointment" class="flex items-center">
+                            <svg class="w-5 h-5 mr-2 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Cancelling...
+                        </span>
+                    </button>
+                    <button wire:click="closeCancelModal"
+                            class="btn btn-secondary"
+                            wire:loading.attr="disabled" wire:target="confirmCancelAppointment">
+                        🔙 Keep Appointment
+                    </button>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    <!-- Booking Modal -->
+    @if($showBookingModal)
+        <div class="modal-overlay" wire:click="closeBookingModal">
+            <div class="modal-container" wire:click.stop>
+                <div class="modal-header">
+                    <h3 class="text-2xl font-bold">{{ Carbon::parse($selectedDate)->format('l, j F Y') }}</h3>
+                </div>
+
+                <div class="modal-body">
+                    <!-- Available Sessions -->
+                    <div class="form-group">
+                        <label class="form-label">Available Sessions</label>
+                        <div class="grid grid-cols-3 gap-4">
+                            @foreach($availableSessions as $index => $session)
+                                <div class="session-option {{ $selectedSession && $selectedSession['session_name'] === $session['session_name'] ? 'selected' : '' }}"
+                                    wire:click="selectSession({{ $index }})">
+                                    <div class="text-center">
+                                        <div class="mb-1 text-sm font-semibold text-gray-800">{{ $session['session_name'] }}</div>
+                                        <div class="text-xs text-gray-600">{{ $session['formatted_time'] }}</div>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+
+                    <!-- Appointment Type -->
+                    <div class="form-group">
+                        <label for="appointmentType" class="form-label">Meeting Type</label>
+                        <div class="text-gray-700 bg-gray-100 cursor-not-allowed form-input">
+                            Online Meeting via Microsoft Teams
+                        </div>
+                    </div>
+
+                    <!-- Required Attendees -->
+                    <div class="form-group">
+                        <label for="requiredAttendees" class="form-label">Required Attendees <span class="text-red-600">*</span></label>
+                        <input type="text" wire:model="requiredAttendees" id="requiredAttendees" class="form-input"
+                            placeholder="john@example.com;jane@example.com">
+                        <p class="mt-2 text-xs text-gray-500">
+                            Separate multiple emails with semicolons (;)
+                        </p>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    @if($sessionValidationError)
+                        <div class="w-full p-3 mb-3 text-sm text-red-800 bg-red-100 border border-red-300 rounded-lg">
+                            <div class="flex items-start">
+                                <svg class="flex-shrink-0 w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                                </svg>
+                                <div class="flex-1">
+                                    <strong class="font-semibold">Appointment session has been booked</strong>
+                                    <p class="mt-1">{{ $sessionValidationError }}</p>
+                                </div>
+                            </div>
+                        </div>
+                    @endif
+                    <button wire:click="submitBooking" class="btn btn-primary"
+                        {{ !$selectedSession || empty(trim($requiredAttendees)) ? 'disabled' : '' }}
+                        wire:loading.attr="disabled" wire:target="submitBooking">
+                        <span wire:loading.remove wire:target="submitBooking">
+                            @if(!$selectedSession)
+                                🚫 Select Session First
+                            @elseif(empty(trim($requiredAttendees)))
+                                🚫 Add Attendees First
+                            @else
+                                📨 Submit Booking
+                            @endif
+                        </span>
+                        <span wire:loading wire:target="submitBooking" class="flex items-center">
+                            <svg class="w-5 h-5 mr-2 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Processing...
+                        </span>
+                    </button>
+                    <button wire:click="closeBookingModal" class="btn btn-secondary"
+                        wire:loading.attr="disabled" wire:target="submitBooking">
+                        ❌ Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    <!-- Update the Success Modal section -->
+    @if($showSuccessModal && $submittedBooking)
+        <div class="modal-overlay" wire:click="closeSuccessModal">
+            <div class="max-w-2xl modal-container" wire:click.stop>
+                <!-- Header with TimeTec branding -->
+                <div class="text-center modal-header">
+                    <!-- Close Button -->
+                    <button wire:click="closeSuccessModal" class="absolute text-white transition-colors top-4 right-4 hover:text-gray-200">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                    <div class="text-4xl font-bold text-white">
+                        TimeTec HRMS
+                    </div>
+                </div>
+
+                <div class="text-center modal-body">
+                    <!-- Success Content -->
+                    <div class="mb-8">
+                        <h2 class="mb-4 text-3xl font-bold text-green-600">Booking Submitted!</h2>
+                        <p class="mb-6 text-lg text-gray-600" style="text-align: left;">
+                            Your {{ strtolower($submittedBooking['session_type'] ?? 'meeting') }} request has been submitted successfully. <br>You'll receive an email for appointment details soon.
+                        </p>
+                    </div>
+
+                    <!-- Booking Details Card -->
+                    <div class="p-6 mb-6 border-2 border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl">
+                        <div class="grid grid-cols-1 gap-4 text-sm md:grid-cols-2">
+                            <div class="text-left">
+                                <div class="font-medium text-gray-600">Date & Time</div>
+                                <div class="font-bold text-gray-800">{{ $submittedBooking['date'] }}</div>
+                                <div class="font-bold text-indigo-600">{{ $submittedBooking['time'] }}</div>
+                            </div>
+                            <div class="text-left">
+                                <div class="font-medium text-gray-600">Session & Implementer</div>
+                                <div class="font-bold text-gray-800">{{ $submittedBooking['session'] }}</div>
+                                <div class="font-bold text-indigo-600">{{ $submittedBooking['implementer'] }}</div>
+                            </div>
+                        </div>
+
+                        @if($submittedBooking['has_teams'])
+                        <div class="p-3 mt-4 border border-green-200 rounded-lg bg-green-50">
+                            <p class="mt-1 text-sm text-green-600">Meeting link will be included in your email.</p>
+                        </div>
+                        @endif
+                    </div>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    @if($showMeetingDetailsModal && $selectedMeetingDetails)
+        <div class="modal-overlay" wire:click="closeMeetingDetailsModal">
+            <div class="modal-container" wire:click.stop>
+                <div class="modal-header">
+                    <!-- Close Button -->
+                    <button wire:click="closeMeetingDetailsModal" class="absolute text-white transition-colors top-4 right-4 hover:text-gray-200">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+
+                    <h3 class="text-2xl font-bold">
+                        {{ $selectedMeetingDetails['type'] === 'KICK OFF MEETING SESSION' ? 'Kick-Off Meeting' : 'Review Session' }} Details
+                    </h3>
+                </div>
+
+                <div class="modal-body">
+                    <!-- Meeting Basic Info -->
+                    <div class="p-4 mb-6 border-2 border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl">
+                        <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                            <div>
+                                <div class="mb-2 text-sm font-medium text-gray-600">Date</div>
+                                <div class="font-semibold text-gray-800 text-md">{{ $selectedMeetingDetails['date'] }}</div>
+                            </div>
+                            <div>
+                                <div class="mb-2 text-sm font-medium text-gray-600">Time</div>
+                                <div class="font-semibold text-indigo-600 text-md">{{ $selectedMeetingDetails['time'] }}</div>
+                            </div>
+                            <div>
+                                <div class="mb-2 text-sm font-medium text-gray-600">Type</div>
+                                <div class="font-semibold text-gray-800 text-md">
+                                    {{ $selectedMeetingDetails['type'] === 'KICK OFF MEETING SESSION' ? 'Kick-Off Meeting' : 'Review Session' }}
+                                </div>
+                            </div>
+                            <div>
+                                <div class="mb-2 text-sm font-medium text-gray-600">Status</div>
+                                <div class="inline-flex px-3 py-1 text-sm font-semibold rounded-full
+                                    @if($selectedMeetingDetails['status'] === 'Done')
+                                        bg-green-100 text-green-800
+                                    @elseif($selectedMeetingDetails['status'] === 'New')
+                                        bg-blue-100 text-blue-800
+                                    @else
+                                        bg-gray-100 text-gray-800
+                                    @endif">
+                                    @if($selectedMeetingDetails['status'] === 'Done')
+                                        ✅ Completed
+                                    @elseif($selectedMeetingDetails['status'] === 'New')
+                                        🕒 Scheduled
+                                    @else
+                                        {{ $selectedMeetingDetails['status'] }}
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Implementer Details -->
+                    <div class="form-group">
+                        <label class="form-label">Implementer Details</label>
+                        <div class="p-4 border border-indigo-200 rounded-lg bg-indigo-50">
+                            <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+                                <div>
+                                    <div class="mb-1 text-sm font-medium text-indigo-700">Name:</div>
+                                    <div class="font-semibold text-gray-800 text-md">{{ $selectedMeetingDetails['implementer_name'] }}</div>
+                                </div>
+                                <div>
+                                    <div class="mb-1 text-sm font-medium text-indigo-700">Email:</div>
+                                    <div class="text-sm text-gray-700">
+                                        <a href="mailto:{{ $selectedMeetingDetails['implementer_email'] }}"
+                                        class="text-blue-600 hover:text-blue-800 hover:underline">
+                                            {{ $selectedMeetingDetails['implementer_email'] }}
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Required Attendees -->
+                    @if($selectedMeetingDetails['required_attendees'])
+                        <div class="form-group">
+                            <label class="form-label">Required Attendees</label>
+                            <div class="p-4 border border-gray-200 rounded-lg bg-gray-50">
+                                <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
+                                    @foreach(explode(';', $selectedMeetingDetails['required_attendees']) as $email)
+                                        @if(trim($email))
+                                            <div class="flex items-center p-2 bg-white border border-gray-200 rounded">
+                                                <svg class="w-4 h-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207"></path>
+                                                </svg>
+                                                <a href="mailto:{{ trim($email) }}"
+                                                class="text-sm text-blue-600 hover:text-blue-800 hover:underline">
+                                                    {{ trim($email) }}
+                                                </a>
+                                            </div>
+                                        @endif
+                                    @endforeach
+                                </div>
+                            </div>
+                        </div>
+                    @endif
+                </div>
+
+                <div class="modal-footer">
+                    @if($selectedMeetingDetails['meeting_link'])
+                        @php
+                            // Check if meeting is past or completed
+                            $meetingDate = Carbon::parse($selectedMeetingDetails['date']);
+                            $isPastMeeting = $meetingDate->isPast();
+                            $isCompleted = $selectedMeetingDetails['status'] === 'Done';
+                            $shouldDisableJoin = $isPastMeeting || $isCompleted;
+                        @endphp
+
+                        @if($shouldDisableJoin)
+                            <button class="btn btn-primary" disabled style="opacity: 0.5; cursor: not-allowed;">
+                                @if($isCompleted)
+                                    ✅ Meeting Completed
+                                @else
+                                    🕐 Meeting Expired
+                                @endif
+                            </button>
+                        @else
+                            <a href="{{ $selectedMeetingDetails['meeting_link'] }}"
+                            target="_blank"
+                            class="btn btn-primary">
+                                🚀 Join Teams Meeting
+                            </a>
+                        @endif
+                    @endif
+
+                    <button wire:click="closeMeetingDetailsModal" class="btn btn-secondary">
+                        ❌ Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    <div class="fixed z-40 bottom-10 right-6">
+        <div class="help-button-wrapper">
+            <button wire:click="showTutorialModal"
+                    class="flex items-center justify-center text-white transition-all duration-300 rounded-full shadow-lg w-14 h-14 bg-gradient-to-r from-blue-500 to-purple-600 hover:shadow-xl hover:scale-110 group help-button">
+                <svg class="w-6 h-6 transition-transform group-hover:rotate-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+            </button>
+
+            <!-- Tooltip -->
+            <div class="help-tooltip">
+                View Tutorial
+            </div>
+        </div>
+    </div>
+
+    @if($showTutorial)
+        <div class="tutorial-modal">
+            <div class="tutorial-container">
+                <!-- Tutorial Header -->
+                <div class="tutorial-header">
+                    <div class="tutorial-header-pattern"></div>
+
+                    <div class="tutorial-header-content">
+                        <div style="display: flex; align-items: center;">
+                            <div>
+                                <h3 class="tutorial-title">How to Schedule Your Sessions</h3>
+                                <div class="tutorial-step-info">
+                                    <span class="tutorial-step-badge">
+                                        Step {{ $currentTutorialStep }} of {{ $totalTutorialSteps }}
+                                    </span>
+                                    <div class="tutorial-progress-dots">
+                                        @for($i = 1; $i <= $totalTutorialSteps; $i++)
+                                            <div class="tutorial-dot {{ $i <= $currentTutorialStep ? 'active' : '' }}"></div>
+                                        @endfor
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button wire:click="closeTutorial" class="tutorial-close-btn">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 1.25rem; height: 1.25rem;">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <!-- Progress Bar -->
+                    <div class="tutorial-progress-bar">
+                        <div class="tutorial-progress-bg">
+                            <div class="tutorial-progress-fill" style="width: {{ ($currentTutorialStep / $totalTutorialSteps) * 100 }}%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tutorial Content -->
+                <div class="tutorial-body">
+                    @if($currentTutorialStep == 1)
+                        <p class="tutorial-step-description">
+                            This is your personal calendar where you can schedule <strong>Kick-Off Meetings</strong> and <strong>Review Sessions</strong> with your implementer.
+                        </p>
+
+                        <div class="tutorial-grid">
+                            <div class="tutorial-card blue">
+                                <h5 style="font-weight: 700; color: #1e40af; margin-bottom: 0.5rem;">Kick-Off <br>Meetings</h5>
+                            </div>
+                            <div class="tutorial-card purple">
+                                <h5 style="font-weight: 700; color: #6b21a8; margin-bottom: 0.5rem;">Review <br>Sessions</h5>
+                            </div>
+                        </div>
+
+                        <div class="tutorial-tip">
+                            <p style="color: #047857; font-size: 0.875rem;">
+                                <strong style="color: #059669;">Green dates</strong> are available for booking, and your existing meetings appear in <strong style="color: #2563eb;">blue</strong>.
+                            </p>
+                        </div>
+
+                    @elseif($currentTutorialStep == 2)
+                        <h4 class="tutorial-step-title">Finding Available Dates</h4>
+                        <p class="tutorial-step-description">
+                            Look for dates highlighted in <span style="padding: 0.25rem 0.75rem; background: #dcfce7; color: #166534; border-radius: 20px; font-weight: 600;">green</span>
+                        </p>
+
+                        <!-- Mini Calendar Preview -->
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin: 1.5rem auto; max-width: 600px;">
+                            <div class="tutorial-card green" style="text-align: center; padding: 0.75rem;">
+                                <div style="font-weight: 700; color: #166534;">15</div>
+                                <div style="font-size: 0.75rem; color: #059669; margin-top: 0.25rem;">✨ 3 available</div>
+                            </div>
+                            <div style="padding: 0.75rem; background: #f3f4f6; border: 2px solid #d1d5db; border-radius: 12px; text-align: center; opacity: 0.6;">
+                                <div style="font-weight: 700; color: #6b7280;">16</div>
+                                <div style="font-size: 0.75rem; color: #9ca3af; margin-top: 0.25rem;">Weekend</div>
+                            </div>
+                            <div class="tutorial-card blue" style="text-align: center; padding: 0.75rem;">
+                                <div style="font-weight: 700; color: #1e40af;">17</div>
+                                <div style="font-size: 0.75rem; color: #2563eb; margin-top: 0.25rem;">📅 Your Meeting</div>
+                            </div>
+                        </div>
+
+                    @elseif($currentTutorialStep == 3)
+                        <h4 class="tutorial-step-title">Select Your Time Slot</h4>
+
+                        <!-- Session Selector Preview -->
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; margin: 1.5rem 0;">
+                            <div style="padding: 1rem; border: 2px solid #e5e7eb; border-radius: 12px; text-align: center; background: white;">
+                                <div style="font-weight: 700; color: #374151; font-size: 0.875rem;">SESSION 1</div>
+                                <div style="color: #6b7280; font-size: 0.75rem;">9:30 AM</div>
+                            </div>
+                            <div style="padding: 1rem; border: 2px solid #3b82f6; border-radius: 12px; text-align: center; background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%); transform: scale(1.05);">
+                                <div style="font-weight: 700; color: #1e40af; font-size: 0.875rem;">SESSION 2</div>
+                                <div style="color: #2563eb; font-size: 0.75rem;">11:00 AM</div>
+                                <div style="margin-top: 0.5rem; padding: 0.25rem 0.5rem; background: #3b82f6; color: white; border-radius: 20px; font-size: 0.625rem;">Selected</div>
+                            </div>
+                            <div style="padding: 1rem; border: 2px solid #e5e7eb; border-radius: 12px; text-align: center; background: white;">
+                                <div style="font-weight: 700; color: #374151; font-size: 0.875rem;">SESSION 3</div>
+                                <div style="color: #6b7280; font-size: 0.75rem;">2:00 PM</div>
+                            </div>
+                        </div>
+
+                    @elseif($currentTutorialStep == 4)
+                        <h4 class="tutorial-step-title">Add Attendees & Submit</h4>
+
+                        <!-- Form Preview -->
+                        <div style="padding: 1rem; border: 2px solid #10b981; border-radius: 12px; background: #ecfdf5; margin: 1.5rem 0; text-align: left;">
+                            <label style="display: block; font-weight: 600; color: #374151; margin-bottom: 0.5rem; font-size: 0.875rem;">
+                                Required Attendees <span style="color: #ef4444;">*</span>
+                            </label>
+                            <input type="text"
+                                style="width: 100%; padding: 0.75rem; border: 2px solid #10b981; border-radius: 8px; background: #f0fdf4; font-size: 0.875rem;"
+                                placeholder="john@example.com;jane@example.com"
+                                disabled>
+                            <p style="margin-top: 0.5rem; font-size: 0.75rem; color: #059669;">💡 Separate multiple emails with semicolons (;)</p>
+                        </div>
+                    @endif
+                </div>
+
+                <!-- Tutorial Footer -->
+                <div class="tutorial-footer">
+                    <div style="display: flex; gap: 0.75rem;">
+                        @if($currentTutorialStep > 1)
+                            <button wire:click="previousTutorialStep" class="tutorial-btn secondary">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="arrow-left" style="margin-right: 0.5rem;">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                                </svg>
+                                Previous
+                            </button>
+                        @endif
+                    </div>
+
+                    <div style="display: flex; gap: 0.75rem;">
+                        <button wire:click="skipTutorial" class="tutorial-btn secondary">
+                            Skip Tutorial
+                        </button>
+
+                        @if($currentTutorialStep < $totalTutorialSteps)
+                            <button wire:click="nextTutorialStep" class="tutorial-btn primary">
+                                Next Step
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="arrow-right" style="margin-left: 0.5rem;">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                </svg>
+                            </button>
+                        @else
+                            <button wire:click="completeTutorial" class="tutorial-btn success">
+                                <span style="margin-right: 0.5rem;">🎉</span>
+                                Get Started!
+                            </button>
+                        @endif
+                    </div>
+                </div>
+            </div>
+        </div>
+    @endif
+</div>

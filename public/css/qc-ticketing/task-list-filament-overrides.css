@@ -1,0 +1,44 @@
+/* Filament table overrides to match TSX DataTable look for QC Task List */
+.ql-tasklist-card .fi-ta {
+    border: none;
+    box-shadow: none;
+    background: transparent;
+}
+.ql-tasklist-card .fi-ta-header,
+.ql-tasklist-card .fi-ta-filters {
+    background: transparent;
+    border: none;
+    padding: 0;
+}
+.ql-tasklist-card .fi-ta-table {
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-sm);
+    overflow: hidden;
+}
+.ql-tasklist-card .fi-ta-header-cell {
+    background: var(--bg-secondary);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--qc-gray-500);
+    padding: 12px 16px;
+}
+.ql-tasklist-card .fi-ta-cell {
+    font-size: 13px;
+    padding: 12px 16px;
+    color: var(--text-primary);
+}
+.ql-tasklist-card .fi-ta-row:hover {
+    background: var(--primary-purple-lighter) !important;
+}
+.ql-tasklist-card .fi-ta-text-item a,
+.ql-tasklist-card .fi-ta-text-item .fi-badge {
+    font-weight: 500;
+}
+.ql-tasklist-card .fi-badge {
+    border-radius: 9999px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 10px;
+}

@@ -1,0 +1,300 @@
+@import './variables.css';
+
+.qc-page {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    font-family: var(--font-primary);
+}
+
+/* Stretch Filament page content to full width */
+.fi-page .fi-simple-main,
+.fi-page .fi-page-content,
+.fi-main-ctn,
+.fi-main {
+    max-width: none !important;
+}
+
+.qc-page-title {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.qc-page-subtitle {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+}
+
+.qc-tabs {
+    display: flex;
+    gap: 24px;
+    margin-bottom: 24px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.qc-tab {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 4px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    transition: color 0.15s ease;
+}
+
+.qc-tab:hover { color: var(--text-primary); }
+
+.qc-tab.active {
+    color: var(--primary-purple);
+}
+
+.qc-tab.active::after {
+    content: '';
+    position: absolute;
+    left: 0; right: 0; bottom: -1px;
+    height: 2px;
+    background: var(--primary-purple);
+    border-radius: 2px 2px 0 0;
+}
+
+.qc-card {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    padding: 20px;
+    box-shadow: var(--shadow-sm);
+}
+
+.qc-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+
+.qc-card-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.qc-card-badge {
+    padding: 4px 10px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--qc-gray-600);
+    background: var(--bg-tertiary);
+    border-radius: 9999px;
+}
+
+.qc-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+}
+
+@media (min-width: 1024px) {
+    .qc-grid-2 { grid-template-columns: 1fr 1fr; }
+}
+
+.qc-grid-4 {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+}
+
+@media (min-width: 768px) {
+    .qc-grid-4 { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (min-width: 1280px) {
+    .qc-grid-4 { grid-template-columns: repeat(4, 1fr); }
+}
+
+/* Kanban column */
+.qc-kanban-col {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    overflow: hidden;
+}
+
+.qc-kanban-col-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.qc-kanban-col-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.qc-kanban-col-indicator {
+    width: 4px;
+    height: 16px;
+    border-radius: 2px;
+}
+
+.qc-kanban-col-count {
+    font-size: 13px;
+    color: var(--text-tertiary);
+}
+
+.qc-kanban-col-body {
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 200px;
+}
+
+/* Kanban card */
+.qc-kanban-card {
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-sm);
+    padding: 12px;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.qc-kanban-card:hover {
+    border-color: var(--primary-purple-light);
+    box-shadow: var(--shadow-sm);
+}
+
+.qc-kanban-card-id {
+    display: inline-block;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--primary-purple-dark);
+    background: var(--primary-purple-lighter);
+    border-radius: 4px;
+    margin-bottom: 6px;
+}
+
+.qc-kanban-card-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+    line-height: 1.4;
+}
+
+.qc-kanban-card-meta {
+    font-size: 12px;
+    color: var(--text-secondary);
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.qc-kanban-card-meta .product { color: var(--primary-purple); font-weight: 500; }
+
+.qc-kanban-card-date {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+.qc-kanban-card-date.overdue { color: var(--error-red); font-weight: 500; }
+
+/* Header cluster (top-right badge buttons) */
+.qc-action-pill {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    box-shadow: var(--shadow-sm);
+}
+
+.qc-action-pill .icon-wrap {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: var(--primary-purple-lighter);
+    color: var(--primary-purple);
+}
+
+.qc-action-pill .icon-wrap.orange {
+    background: #fef3c7;
+    color: #d97706;
+}
+
+.qc-action-pill-badge {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 6px;
+    background: var(--error-red);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 9999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Row list (overdue tasks) */
+.qc-row-list { display: flex; flex-direction: column; gap: 8px; max-height: 420px; overflow-y: auto; }
+.qc-row-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-sm);
+    transition: background 0.15s;
+}
+.qc-row-item:hover { background: var(--bg-secondary); }
+.qc-row-id {
+    display: inline-block;
+    padding: 2px 8px;
+    margin-right: 8px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--primary-purple-dark);
+    background: var(--primary-purple-lighter);
+    border-radius: 4px;
+}
+.qc-row-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+.qc-row-meta {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+}
+.qc-row-due { font-size: 13px; font-weight: 500; color: var(--error-red); }

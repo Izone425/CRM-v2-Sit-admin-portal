@@ -1,0 +1,787 @@
+<x-filament::page>
+    <head>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+        <style>
+            /* Container */
+            .session-container {
+                display: flex;
+                align-items: center;
+                padding: 20px;
+                border-radius: 8px;
+            }
+
+            /* Left Section */
+            .session-count {
+                flex: 1;
+                text-align: center;
+            }
+            .session-number {
+                font-size: 3rem;
+                font-weight: bold;
+                color: #333;
+                margin-top: 10px;
+            }
+            .session-label {
+                font-size: 0.9rem;
+                color: #777;
+            }
+
+            /* Middle Divider */
+            .session-divider {
+                flex: 0.005;
+                height: 150px;
+                background: #ccc;
+                width: 0.5px;
+            }
+
+            /* Right Section */
+            .session-bars {
+                flex: 3;
+                display: flex;
+                justify-content: center;
+                align-items: flex-end;
+                gap: 32px; /* Space between bars */
+            }
+
+            .bar-group {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                width: 60px;
+                position: relative;
+            }
+
+            .percentage-label {
+                margin-bottom: 5px;
+                font-size: 12px;
+                font-weight: bold;
+                color: #333;
+            }
+
+            .bar-wrapper {
+                width: 40px;
+                height: 100px;
+                background-color: #E5E7EB; /* Light gray */
+                border-radius: 8px;
+                position: relative;
+                overflow: hidden;
+            }
+
+            .bar-fill {
+                position: absolute;
+                bottom: 0;
+                width: 100%;
+                border-radius: 8px;
+                transition: height 0.5s ease-in-out;
+            }
+
+            .session-type {
+                margin-top: 8px;
+                font-size: 12px;
+                font-weight: 500;
+                text-align: center;
+                color: #374151;
+            }
+
+            /* Tooltip (Hover Message) */
+            .hover-message {
+                position: absolute;
+                bottom: 110%;
+                background-color: rgba(0, 0, 0, 0.75);
+                color: white;
+                padding: 5px 10px;
+                font-size: 12px;
+                border-radius: 5px;
+                white-space: nowrap;
+                opacity: 0;
+                visibility: hidden;
+                transition: opacity 0.3s ease-in-out;
+            }
+
+            .bar-group:hover .hover-message {
+                opacity: 1;
+                visibility: visible;
+            }
+
+            .wrapper-container {
+                background-color: white;
+                border-radius: 10px;
+                padding: 20px;
+                box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
+                width: 100%;
+            }
+
+            .grid-container {
+                display: grid;
+                grid-template-columns: 1fr 1fr 2fr; /* 1:1:2 Ratio */
+                gap: 16px;
+                width: 100%;
+            }
+
+            /* Total Leads Box */
+            .lead-card {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                padding: 12px;
+                border-radius: 10px;
+                text-align: center;
+            }
+
+            .icon-container {
+                background-color: #DBEAFE;
+                padding: 8px;
+                border-radius: 8px;
+            }
+
+            .icon-container svg {
+                width: 30px;
+                height: 30px;
+                color: #3B82F6;
+            }
+
+            .lead-number {
+                font-size: 3rem;
+                font-weight: bold;
+                color: #1F2937;
+                margin-top: 8px;
+            }
+
+            .lead-text {
+                font-size: 0.8rem;
+                color: #6B7280;
+            }
+
+            /* Status & Progress Circles */
+            .status-box {
+                padding: 16px;
+                background: #F9FAFB;
+                border-radius: 10px;
+                text-align: center;
+            }
+
+            .progress-circle {
+                position: relative;
+                width: 80px;
+                height: 80px;
+            }
+
+            .progress-label {
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                font-size: 14px;
+                font-weight: bold;
+                color: #333;
+            }
+
+            /* Company Size Chart */
+            .company-size-container {
+                padding: 16px;
+                background-color: white;
+                border-radius: 8px;
+                box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+                text-align: center;
+            }
+
+            .bars-container {
+                display: flex;
+                justify-content: center;
+                align-items: flex-end;
+                height: 160px;
+                gap: 75px;
+            }
+
+            .bar-group {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                width: 50px;
+                position: relative;
+            }
+
+            .percentage-label {
+                margin-bottom: 5px;
+                font-size: 12px;
+                font-weight: bold;
+                color: #333;
+            }
+
+            .bar-wrapper {
+                width: 60px;
+                height: 100px;
+                background-color: #E5E7EB; /* Light gray */
+                border-radius: 8px;
+                position: relative;
+                overflow: hidden;
+            }
+
+            .bar-fill {
+                position: absolute;
+                bottom: 0;
+                width: 100%;
+                border-radius: 8px;
+                transition: height 0.5s ease-in-out;
+            }
+
+            .size-label {
+                margin-top: 8px;
+                font-size: 12px;
+                font-weight: 500;
+                color: #374151;
+            }
+
+            /* Hover Message */
+            .hover-message {
+                position: absolute;
+                bottom: 110%;
+                background-color: rgba(0, 0, 0, 0.75);
+                color: white;
+                padding: 5px 10px;
+                font-size: 12px;
+                border-radius: 5px;
+                white-space: nowrap;
+                opacity: 0;
+                visibility: hidden;
+                transition: opacity 0.3s ease-in-out;
+            }
+
+            .bar-group:hover .hover-message {
+                opacity: 1;
+                visibility: visible;
+            }
+
+            .lead-summary-box {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 20px;
+                border-radius: 10px;
+            }
+
+            /* Left Section (30%) */
+            .lead-count {
+                flex: 3;
+                text-align: center;
+            }
+            .lead-number {
+                font-size: 2rem;
+                font-weight: bold;
+                color: #333;
+            }
+            .lead-label {
+                font-size: 0.9rem;
+                color: #777;
+            }
+
+            /* Middle Divider (5%) */
+            .lead-divider {
+                flex: 0.02;
+                height: 150px;
+                background: #ccc;
+                width: 0.5px;
+            }
+
+            /* Right Section (65%) */
+            .lead-progress {
+                flex: 6.5;
+            }
+            .status-title {
+                font-size: 1rem;
+                font-weight: bold;
+                margin-bottom: 10px;
+            }
+
+            /* Progress Bar */
+            .progress-info {
+                display: flex;
+                justify-content: space-between;
+                font-size: 0.9rem;
+                color: #555;
+            }
+            .progress-bar {
+                width: 100%;
+                height: 10px;
+                background: #e0e0e0;
+                border-radius: 5px;
+                margin-top: 5px;
+                position: relative;
+                margin-bottom: 10px;
+            }
+            .progress-fill {
+                height: 100%;
+                border-radius: 5px;
+            }
+
+            /* Left Section (30%) */
+            .lead-count {
+                flex: 3;
+                text-align: center;
+            }
+            .lead-number {
+                font-size: 2rem;
+                font-weight: bold;
+                color: #333;
+            }
+            .lead-label {
+                font-size: 0.9rem;
+                color: #777;
+            }
+
+            /* Middle Divider (5%) */
+            .lead-divider {
+                flex: 0.02;
+                height: 150px;
+                background: #ccc;
+                width: 0.5px;
+            }
+
+            /* Right Section (65%) */
+            .lead-progress {
+                flex: 6.5;
+            }
+            .status-title {
+                font-size: 1rem;
+                font-weight: bold;
+                margin-bottom: 10px;
+            }
+
+            /* Progress Bar */
+            .progress-info {
+                display: flex;
+                justify-content: space-between;
+                font-size: 0.9rem;
+                color: #555;
+            }
+            .progress-bar {
+                width: 100%;
+                height: 10px;
+                background: #e0e0e0;
+                border-radius: 5px;
+                margin-top: 5px;
+                position: relative;
+                margin-bottom: 10px;
+            }
+            .progress-fill {
+                height: 100%;
+                border-radius: 5px;
+            }
+            .cursor-pointer:hover {
+                transform: scale(1.02);
+                transition: all 0.2s;
+            }
+        </style>
+    </head>
+    <div class="flex flex-col items-center justify-between mb-6 md:flex-row">
+            <!-- Title -->
+        <h1 class="text-2xl font-bold tracking-tight fi-header-heading text-gray-950 dark:text-white sm:text-3xl">Demo Analysis</h1>
+        <div class="flex items-center mb-6">
+            @if(in_array(auth()->user()->role_id, [1, 3]))
+                <!-- Salesperson Filter -->
+                <div>
+                    <select wire:model="selectedUser" id="userFilter" class="mt-1 border-gray-300 rounded-md shadow-sm">
+                        <option value="">All Salespersons</option>
+                        @foreach ($users as $user)
+                            <option value="{{ $user->id }}">{{ $user->name }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+            @endif
+
+            <!-- Filter Mode Toggle -->
+            <div class="ml-10 inline-flex items-center bg-gray-100 border border-gray-200 rounded-lg p-0.5">
+                <button type="button" wire:click="$set('filterMode', 'month')"
+                    class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors {{ $filterMode === 'month' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-600' }}">
+                    <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                    Month
+                </button>
+                <button type="button" wire:click="$set('filterMode', 'range')"
+                    class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors {{ $filterMode === 'range' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-600' }}">
+                    <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12M8 12h8m-8 5h4M4 7h.01M4 12h.01M4 17h.01"/></svg>
+                    Range
+                </button>
+                <button type="button" wire:click="$set('filterMode', 'custom')"
+                    class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors {{ $filterMode === 'custom' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-600' }}">
+                    <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v3a1 1 0 01-.293.707L15 13.414V19l-6 3v-8.586L3.293 7.707A1 1 0 013 7V4z"/></svg>
+                    Custom
+                </button>
+            </div>
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+            @if ($filterMode === 'month')
+                <div class="ml-6">
+                    <input wire:model.live="selectedMonth" type="month" class="py-1.5 text-sm border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                </div>
+            @elseif ($filterMode === 'range')
+                <div class="flex items-center gap-2 ml-6">
+                    <label class="text-sm font-medium text-gray-500">From</label>
+                    <input type="date" wire:model.live="startDate" class="py-1.5 text-sm border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                    <label class="text-sm font-medium text-gray-500">To</label>
+                    <input type="date" wire:model.live="endDate" class="py-1.5 text-sm border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                </div>
+            @else
+                <div class="flex items-center gap-2 ml-6">
+                    <select wire:model.live="customType" class="py-1.5 text-sm font-medium border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                        <option value="quarter">Quarter</option>
+                        <option value="half">Half Year</option>
+                        <option value="year">Year</option>
+                    </select>
+                    <select wire:model.live="customValue" class="py-1.5 text-sm font-medium border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                        @foreach ($this->customOptions as $value => $label)
+                            <option value="{{ $value }}">{{ $label }}</option>
+                        @endforeach
+                    </select>
+                </div>
+            @endif
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <div class="p-6 bg-white rounded-lg shadow-lg" wire:poll.1s>
+            <div class="flex items-center mb-6 space-x-2">
+                <i class="text-lg text-gray-500 fa fa-bookmark"></i>&nbsp;&nbsp;
+                <h3 class="text-xl font-bold text-gray-800">Total Session</h3>
+            </div>
+
+            <div class="session-container">
+                <!-- Left Section: Total Sessions -->
+                <div class="session-count">
+                    <p class="lead-number">{{ $totalAppointments }}</p>
+                    <p class="lead-label">Sessions</p>
+                </div>
+
+                <!-- Middle Divider -->
+                <div class="session-divider"></div>
+
+                <!-- Right Section: Vertical Bar Chart -->
+                <div class="session-bars">
+                    @foreach ($typeData as $type => $count)
+                        @php
+                            $percentage = $totalAppointments > 0 ? round(($count / $totalAppointments) * 100, 2) : 0;
+                            $barColor = match($loop->index) {
+                                0 => '#ff6969',   // New Demo - Yellow
+                                1 => '#ff7b9a',   // Webinar Demo - Orange
+                                2 => '#ff944f',   // HRMS Demo - Red
+                                3 => '#ffb442',   // System Discussion - Green
+                                default => '#ffdf92', // HRDF Discussion - Blue
+                            };
+                            $barBgColor = match($loop->index) {
+                                0 => '#ffd3d5',   // New Demo - Yellow
+                                1 => '#ffc4c9',   // Webinar Demo - Orange
+                                2 => '#ffece0',   // HRMS Demo - Red
+                                3 => '#ffe59d',   // System Discussion - Green
+                                default => '#fff6dc', // HRDF Discussion - Blue
+                            };
+                        @endphp
+
+                        <div class="cursor-pointer bar-group" wire:click="openDemoDetailSlideOver('{{ $type }}')">
+                            <!-- Hover Message for Count -->
+                            <div class="hover-message">{{ $percentage }}%</div>
+
+                            <p class="percentage-label">{{ $count }}</p>
+                            <div class="bar-wrapper" style="background-color: {{ $barBgColor }};">
+                                <div class="bar-fill" style="height: {{ $percentage }}%; background-color: {{ $barColor }};"></div>
+                            </div>
+                            <p class="session-type">{{ $type }}</p>
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+        </div>
+        <div class="p-6 bg-white rounded-lg shadow-lg" wire:poll.1s>
+            <div class="flex items-center mb-6 space-x-2">
+                <i class="text-lg text-gray-500 fa fa-bookmark"></i>&nbsp;&nbsp;
+                <h3 class="text-xl font-bold text-gray-800">Total Days</h3>
+            </div>
+
+            <div class="session-container">
+                <!-- Left Section: Total Days -->
+                <div class="session-count">
+                    <p class="lead-number">{{ $days['totalDays'] }}</p>
+                    <p class="lead-label">Days</p>
+                </div>
+
+                <!-- Middle Divider -->
+                <div class="session-divider"></div>
+
+                <!-- Right Section: Vertical Bar Chart -->
+                <div class="session-bars">
+                    @foreach (['publicHolidays' => 'Public Holidays', 'weekends' => 'Weekend Days', 'leave' => 'TimeTec Leave', 'workingDays' => 'Working Days'] as $key => $label)
+                        @php
+                            $percentage = $days['totalDays'] > 0 ? round(($days[$key] / $days['totalDays']) * 100, 2) : 0;
+                            $barColor = match($key) {
+                                'publicHolidays' => '#B9D6F8',  /* Light Blue */
+                                'weekends' => '#91C9F7',  /* Blue */
+                                'leave' => '#65E4EA',  /* Dark Blue */
+                                'workingDays' => '#B4F7F7', /* Purple */
+                            };
+                            $barBgColor = match($key) {
+                                'publicHolidays' => '#EDF5FD',  /* Light Blue */
+                                'weekends' => '#E6F2FC',  /* Blue */
+                                'leave' => '#E0FBFC',  /* Dark Blue */
+                                'workingDays' => '#ECFFFE', /* Purple */
+                            };
+                        @endphp
+
+                        <div class="bar-group">
+                            <!-- Hover Message for Count -->
+                            <div class="hover-message">{{ $percentage }}%</div>
+
+                            <p class="percentage-label">{{ $days[$key] }}</p>
+                            <div class="bar-wrapper" style="background-color: {{ $barBgColor }};">
+                                <div class="bar-fill" style="height: {{ $percentage }}%; background-color: {{ $barColor }};"></div>
+                            </div>
+                            <p class="session-type">{{ $label }}</p>
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+        </div>
+        <div class="p-6 bg-white rounded-lg shadow-lg" wire:poll.1s>
+            <!-- Header -->
+            <div class="flex items-center mb-6 space-x-2">
+                <i class="text-lg text-gray-500 fa fa-bookmark"></i>&nbsp;&nbsp;
+                <h3 class="text-xl font-bold text-gray-800">New Demo</h3>
+            </div>
+
+            <!-- Main Box -->
+            <div class="lead-summary-box">
+                <!-- Left Section (30%) -->
+                <div class="lead-count">
+                    <p class="lead-number">{{ $totalNewAppointments }}</p>
+                    <p class="lead-label">Total New Demo</p>
+                </div>
+
+                <!-- Middle Divider -->
+                <div class="lead-divider"></div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+                <!-- Right Section (65%) -->
+                <div class="lead-progress">
+                    <h3 class="status-title">Company Size</h3>
+                    @foreach ($newDemoCompanySizeData as $companySize => $count)
+                        @php
+                            $percentage = $totalNewAppointments > 0 ? round(($count / $totalNewAppointments) * 100, 2) : 0;
+                            $color = match($companySize) {
+                                'Small' => '#D2E9D2',  /* Red */
+                                'Medium' => '#FFE29C',  /* Orange */
+                                'Large' => '#FFD59C',  /* Yellow */
+                                'Enterprise' => '#FF8A8A', /* Green */
+                            };
+                            $bgcolor = match($companySize) {
+                                'Small' => '#F2FAF2',  /* Red */
+                                'Medium' => '#FFF9EB',  /* Orange */
+                                'Large' => '#FFF5E9',  /* Yellow */
+                                'Enterprise' => '#FFEDED', /* Green */
+                            };
+                        @endphp
+
+                        <!-- Company Size Title & Count -->
+                        <div class="cursor-pointer" wire:click="openNewDemoCompanySizeSlideOver('{{ $companySize }}')">
+                            <div class="progress-info">
+                                <span>{{ ucfirst($companySize) }}</span>
+                                <span>{{ $count }} ({{ $percentage }}%)</span>
+                            </div>
+
+                            <div class="progress-bar" style="background-color: {{ $bgcolor }};">
+                                <div class="progress-fill" style="width: {{ $percentage }}%; background-color: {{ $color }};"></div>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+
+            <!-- Separator Line -->
+            <div class="mt-6 mb-6 border-t border-gray-300"></div>
+
+            <!-- Lead Status Summary -->
+            <h3 class="text-lg font-bold text-center text-gray-800">Summary</h3>
+
+            <div class="flex justify-center mt-4 space-x-6">
+                @foreach ($newDemoLeadStatusData as $status => $count)
+                    @php
+                        $percentage = $totalNewAppointmentsByLeadStatus > 0 ? round(($count / $totalNewAppointmentsByLeadStatus) * 100, 2) : 0;
+                        $color = match($status) {
+                            'Closed' => '#82CEC2',  /* Green */
+                            'Lost' => '#A0A0A0',    /* Dark Gray */
+                            'On Hold' => '#B3B3B3', /* Medium Gray */
+                            'No Response' => '#C6C6C6', /* Light Gray */
+                        };
+                        $bgcolor = match($status) {
+                            'Closed' => '#E3F7F5',  /* Green */
+                            'Lost' => '#E5E5E5',    /* Dark Gray */
+                            'On Hold' => '#ECECEC', /* Medium Gray */
+                            'No Response' => '#F7F7F7', /* Light Gray */
+                        };
+                    @endphp
+
+                    <div class="text-center cursor-pointer" wire:click="openNewDemoStatusSlideOver('{{ $status }}')">
+                        <div class="relative w-28 h-28">
+                            <svg width="130" height="130" viewBox="0 0 36 36">
+                                <!-- Background Circle -->
+                                <circle cx="18" cy="18" r="14" stroke="{{ $bgcolor }}" stroke-width="5" fill="none"></circle>
+                                <!-- Progress Indicator -->
+                                <circle cx="18" cy="18" r="14" stroke="{{ $color }}" stroke-width="5" fill="none"
+                                        stroke-dasharray="88"
+                                        stroke-dashoffset="{{ 88 - (88 * ($percentage / 100)) }}"
+                                        stroke-linecap="round"
+                                        transform="rotate(-90 18 18)">
+                                </circle>
+                            </svg>
+                            <!-- Number in Center -->
+                            <div class="absolute inset-0 flex items-center justify-center text-lg font-bold text-gray-900">
+                                {{ $count }}
+                            </div>
+                        </div>
+                        <p class="mt-2 text-sm text-gray-700">{{ $status }}</p>
+                    </div>
+                @endforeach
+            </div>
+        </div>
+        <div class="p-6 bg-white rounded-lg shadow-lg" wire:poll.1s>
+            <!-- Header -->
+            <div class="flex items-center mb-6 space-x-2">
+                <i class="text-lg text-gray-500 fa fa-bookmark"></i>&nbsp;&nbsp;
+                <h3 class="text-xl font-bold text-gray-800">Webinar Demo</h3>
+            </div>
+
+            <!-- Main Box -->
+            <div class="lead-summary-box">
+                <!-- Left Section (30%) -->
+                <div class="lead-count">
+                    <p class="lead-number">{{ $totalWebinarAppointments }}</p>
+                    <p class="lead-label">Total Webinar Demo</p>
+                </div>
+
+                <!-- Middle Divider -->
+                <div class="lead-divider"></div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+                <!-- Right Section (65%) -->
+                <div class="lead-progress">
+                    <h3 class="status-title">Company Size</h3>
+                    @foreach ($webinarDemoCompanySizeData as $companySize => $count)
+                        @php
+                            $percentage = $totalWebinarAppointments > 0 ? round(($count / $totalWebinarAppointments) * 100, 2) : 0;
+                            $color = match($companySize) {
+                                'Small' => '#D2E9D2',  /* Red */
+                                'Medium' => '#FFE29C',  /* Orange */
+                                'Large' => '#FFD59C',  /* Yellow */
+                                'Enterprise' => '#FF8A8A', /* Green */
+                            };
+                            $bgcolor = match($companySize) {
+                                'Small' => '#F2FAF2',  /* Red */
+                                'Medium' => '#FFF9EB',  /* Orange */
+                                'Large' => '#FFF5E9',  /* Yellow */
+                                'Enterprise' => '#FFEDED', /* Green */
+                            };
+                        @endphp
+
+                        <!-- Company Size Title & Count -->
+                        <div class="cursor-pointer" wire:click="openWebinarCompanySizeSlideOver('{{ $companySize }}')">
+                            <div class="progress-info">
+                                <span>{{ ucfirst($companySize) }}</span>
+                                <span>{{ $count }} ({{ $percentage }}%)</span>
+                            </div>
+
+                            <div class="progress-bar" style="background-color: {{ $bgcolor }};">
+                                <div class="progress-fill" style="width: {{ $percentage }}%; background-color: {{ $color }};"></div>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+
+            <!-- Separator Line -->
+            <div class="mt-6 mb-6 border-t border-gray-300"></div>
+
+            <!-- Lead Status Summary -->
+            <h3 class="text-lg font-bold text-center text-gray-800">Summary</h3>
+
+            <div class="flex justify-center mt-4 space-x-6">
+                @foreach ($webinarDemoLeadStatusData as $status => $count)
+                    @continue(!in_array($status, ['Closed', 'Lost', 'On Hold', 'No Response'])) {{-- Prevent unknown statuses --}}
+
+                    @php
+                        $percentage = $totalWebinarAppointmentsByLeadStatus > 0
+                            ? round(($count / $totalWebinarAppointmentsByLeadStatus) * 100, 2)
+                            : 0;
+
+                        $colors = [
+                            'Closed' => ['color' => '#82CEC2', 'bg' => '#E3F7F5'],
+                            'Lost' => ['color' => '#A0A0A0', 'bg' => '#E5E5E5'],
+                            'On Hold' => ['color' => '#B3B3B3', 'bg' => '#ECECEC'],
+                            'No Response' => ['color' => '#C6C6C6', 'bg' => '#F7F7F7'],
+                        ];
+
+                        $color = $colors[$status]['color'];
+                        $bgcolor = $colors[$status]['bg'];
+                    @endphp
+
+                    <div class="text-center cursor-pointer" wire:click="openWebinarStatusSlideOver('{{ $status }}')">
+                        <div class="relative w-28 h-28">
+                            <svg width="130" height="130" viewBox="0 0 36 36">
+                                <circle cx="18" cy="18" r="14" stroke="{{ $bgcolor }}" stroke-width="5" fill="none"></circle>
+                                <circle cx="18" cy="18" r="14" stroke="{{ $color }}" stroke-width="5" fill="none"
+                                        stroke-dasharray="88"
+                                        stroke-dashoffset="{{ 88 - (88 * ($percentage / 100)) }}"
+                                        stroke-linecap="round"
+                                        transform="rotate(-90 18 18)">
+                                </circle>
+                            </svg>
+                            <div class="absolute inset-0 flex items-center justify-center text-lg font-bold text-gray-900">
+                                {{ $count }}
+                            </div>
+                        </div>
+                        <p class="mt-2 text-sm text-gray-700">{{ $status }}</p>
+                    </div>
+                @endforeach
+            </div>
+        </div>
+    </div>
+    <!-- Outer Overlay -->
+    <div
+    x-data="{ open: @entangle('showSlideOver') }"
+    x-show="open"
+    @click.self="open = false"
+    @keydown.window.escape="open = false"
+    class="fixed inset-0 z-[200] flex justify-end bg-black/40 backdrop-blur-sm transition-opacity duration-200"
+    x-transition:enter="transition ease-out duration-200"
+    x-transition:enter-start="opacity-0"
+    x-transition:enter-end="opacity-100"
+    x-transition:leave="transition ease-in duration-100"
+    x-transition:leave-start="opacity-100"
+    x-transition:leave-end="opacity-0"
+    >
+        <div class="w-full h-full max-w-md p-6 overflow-y-auto bg-white shadow-xl">
+            <br><br>
+
+            <div class="flex items-center justify-between p-4 border-b">
+                <h2 class="text-lg font-bold text-gray-800">{{ $slideOverTitle }}</h2>
+                <button @click="open = false" class="text-2xl leading-none text-gray-500 hover:text-gray-700">&times;</button>
+            </div>
+
+            <div class="flex-1 p-4 space-y-2 overflow-y-auto">
+                @forelse ($slideOverList as $item)
+                    @php
+                        $companyName = $item->lead->companyDetail->company_name ?? 'N/A';
+                        $shortened = strtoupper(\Illuminate\Support\Str::limit($companyName, 20, '...'));
+                        $encryptedId = \App\Classes\Encryptor::encrypt($item->lead_id);
+                    @endphp
+
+                    <a
+                        href="{{ url('admin/leads/' . $encryptedId) }}"
+                        target="_blank"
+                        title="{{ $companyName }}"
+                        class="block px-4 py-2 text-sm font-medium text-blue-600 transition border rounded bg-gray-50 hover:bg-blue-50 hover:text-blue-800"
+                    >
+                        {{ $shortened }}
+                    </a>
+                @empty
+                    <div class="text-sm text-gray-500">No data found.</div>
+                @endforelse
+            </div>
+        </div>
+    </div>
+</x-filament::page>

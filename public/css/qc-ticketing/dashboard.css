@@ -1,0 +1,538 @@
+@import './variables.css';
+
+.qcDashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  height: 100%;
+}
+
+/* Header */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 24px;
+  padding-bottom: 16px;
+}
+
+.pageTitle {
+  font-size: 24px;
+  font-weight: 610;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.headerFilters {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.headerFilters > div {
+  min-width: 200px;
+}
+
+/* Side-by-side layout */
+.sideBySideLayout {
+  display: grid;
+  grid-template-columns: 4fr 6fr;
+  gap: 20px;
+  min-height: 0;
+  flex: 1;
+  overflow: visible;
+}
+
+/* Left Panel - Workflow */
+.leftPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+/* Workflow Section Styling */
+.workflowSection {
+  background: white;
+  border-radius: 8px;
+  padding: 16px;
+  border-left: 3px solid #10B981;
+  border-top: 1px solid #E5E7EB;
+  border-right: 1px solid #E5E7EB;
+  border-bottom: 1px solid #E5E7EB;
+  transition: all 0.2s ease;
+}
+
+.workflowSection:hover {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.workflowSection[data-category="qc"] .sectionIcon {
+  background: #D1FAE5;
+  color: #10B981;
+}
+
+.workflowSection[data-category="enhancement"] {
+  border-left-color: #14B8A6;
+}
+
+.workflowSection[data-category="enhancement"] .sectionIcon {
+  background: #CCFBF1;
+  color: #14B8A6;
+}
+
+/* Section Header */
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.sectionIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: #F9FAFB;
+  color: #6B7280;
+  flex-shrink: 0;
+}
+
+.sectionIcon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.sectionTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+}
+
+.totalBadge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 8px;
+  background: #F3F4F6;
+  color: #6B7280;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Progress Container */
+.progressContainer {
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.progressBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.progressStep {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 12px 8px;
+  background: #FAFAFA;
+  border: 1px solid #E5E7EB;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 70px;
+  flex: 1;
+}
+
+.progressStep:hover {
+  background: white;
+  border-color: #9CA3AF;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.progressStep.active {
+  background: #111827;
+  border-color: #111827;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.stepInfo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+}
+
+.stepLabel {
+  font-size: 11px;
+  font-weight: 500;
+  color: #6B7280;
+  text-align: center;
+  line-height: 1.3;
+}
+
+.progressStep.active .stepLabel {
+  color: #D1D5DB;
+}
+
+.stepCount {
+  font-size: 20px;
+  font-weight: 700;
+  color: #111827;
+  line-height: 1;
+}
+
+.progressStep.active .stepCount {
+  color: white;
+}
+
+.progressArrow {
+  font-size: 14px;
+  font-weight: 400;
+  color: #D1D5DB;
+  flex-shrink: 0;
+}
+
+/* Calendar Wrapper */
+.calendarWrapper {
+  margin-top: 16px;
+}
+
+/* Right Panel */
+.rightPanel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: visible;
+}
+
+/* Responsive Design */
+@media (max-width: 1400px) {
+  .sideBySideLayout {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  .leftPanel {
+    padding-right: 0;
+  }
+
+  .rightPanel {
+    min-height: 500px;
+  }
+}
+
+@media (max-width: 768px) {
+  .progressStep {
+    padding: 10px;
+  }
+
+  .stepCount {
+    font-size: 18px;
+  }
+
+  .stepLabel {
+    font-size: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .sectionTitle {
+    font-size: 13px;
+  }
+
+  .stepCount {
+    font-size: 16px;
+  }
+
+  .stepLabel {
+    font-size: 10px;
+  }
+}
+
+/* Assignee Dropdown Styles */
+.assignDropdownWrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.assignDropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  background: white;
+  border: 1px solid #E5E7EB;
+  border-radius: 6px;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  min-width: 280px;
+  max-width: 320px;
+  z-index: 1000;
+  overflow: visible;
+}
+
+.assignDropdownHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-bottom: 1px solid #E5E7EB;
+}
+
+.assignSearch {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid #D1D5DB;
+  border-radius: 4px;
+  font-size: 13px;
+  outline: none;
+}
+
+.assignSearch:focus {
+  border-color: #5B47FB;
+}
+
+.assignClose {
+  background: none;
+  border: none;
+  font-size: 20px;
+  line-height: 1;
+  color: #6B7280;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 3px;
+  transition: all 0.15s ease;
+}
+
+.assignClose:hover {
+  background: #F3F4F6;
+  color: #374151;
+}
+
+.assignList {
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.assignItem {
+  padding: 8px 10px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.assignItem:hover {
+  background: #F9FAFB;
+}
+
+.assignName {
+  font-size: 13px;
+  color: #374151;
+  font-weight: 500;
+}
+
+.assignEmpty {
+  padding: 16px;
+  text-align: center;
+  color: #9CA3AF;
+  font-size: 13px;
+}
+
+.actionBtn {
+  padding: 6px 12px;
+  border: 1px solid #D1D5DB;
+  border-radius: 6px;
+  background: white;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.actionBtn:hover {
+  background: #F9FAFB;
+  border-color: #9CA3AF;
+}
+
+.textBtn {
+  border: none;
+  background: none;
+  padding: 6px 12px;
+}
+
+.primary {
+  color: #5B47FB;
+  background: rgba(91, 71, 251, 0.1);
+  border-color: transparent;
+}
+
+.primary:hover {
+  background: rgba(91, 71, 251, 0.15);
+}
+
+/* Modal Overlay and DatePicker Modal */
+.modalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.datePickerModal {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  max-width: 400px;
+  width: 90%;
+}
+
+.modalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px;
+  border-bottom: 1px solid #E5E7EB;
+}
+
+.modalHeader h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.closeBtn {
+  background: none;
+  border: none;
+  color: #6B7280;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.closeBtn:hover {
+  background: #F3F4F6;
+  color: #111827;
+}
+
+.modalBody {
+  padding: 20px;
+  display: flex;
+  justify-content: center;
+}
+
+.modalFooter {
+  display: flex;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid #E5E7EB;
+  justify-content: flex-end;
+}
+
+.cancelBtn {
+  padding: 8px 16px;
+  border: 1px solid #D1D5DB;
+  border-radius: 6px;
+  background: white;
+  color: #374151;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.cancelBtn:hover {
+  background: #F9FAFB;
+  border-color: #9CA3AF;
+}
+
+.confirmBtn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  background: #5B47FB;
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.confirmBtn:hover {
+  background: #4C3FD8;
+}
+
+/* DatePicker Custom Styles */
+.customCalendar {
+  font-family: inherit;
+  border: none !important;
+}
+
+.datePickerHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px;
+  margin-bottom: 8px;
+}
+
+.datePickerMonth {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.datePickerNavBtn {
+  background: none;
+  border: none;
+  color: #6B7280;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.datePickerNavBtn:hover:not(:disabled) {
+  background: #F3F4F6;
+  color: #111827;
+}
+
+.datePickerNavBtn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}

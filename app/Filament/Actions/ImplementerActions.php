@@ -1,0 +1,2950 @@
+<?php
+namespace App\Filament\Actions;
+
+use App\Services\TemplateSelector;
+use App\Classes\Encryptor;
+use App\Enums\LeadCategoriesEnum;
+use App\Enums\LeadStageEnum;
+use App\Enums\LeadStatusEnum;
+use App\Enums\QuotationStatusEnum;
+use App\Mail\CancelDemoNotification;
+use App\Mail\DemoNotification;
+use App\Mail\FollowUpNotification;
+use App\Mail\SalespersonNotification;
+use Filament\Tables\Actions\Action;
+use Filament\Tables\Actions\ActionGroup;
+use Filament\Notifications\Notification;
+use Filament\Forms\Components\Placeholder;
+use Filament\Support\Enums\ActionSize;
+use App\Models\Lead;
+use App\Models\ActivityLog;
+use App\Models\Appointment;
+use App\Models\EmailTemplate;
+use App\Models\ImplementerAppointment;
+use App\Models\ImplementerLogs;
+use App\Models\SoftwareHandover;
+use App\Models\InvalidLeadReason;
+use App\Models\User;
+use App\Services\MicrosoftGraphService;
+use App\Services\QuotationService;
+use Beta\Microsoft\Graph\Model\Event;
+use Exception;
+use Filament\Forms\Components\Checkbox;
+use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Fieldset;
+use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Grid;
+use Filament\Forms\Components\Hidden;
+use Filament\Forms\Components\RichEditor;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\TimePicker;
+use Filament\Forms\Components\Toggle;
+use Filament\Forms\Components\ToggleButtons;
+use Filament\Forms\Get;
+use Filament\Forms\Set;
+use Illuminate\Mail\Message;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event as FacadesEvent;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\HtmlString;
+use Microsoft\Graph\Graph;
+use Illuminate\Support\Str;
+use Livewire\Component;
+
+class ImplementerActions
+{
+    /**
+     * Get the reschedule implementation appointment action
+     *
+     * @return \Filament\Tables\Actions\Action
+     */
+    public static function rescheduleAppointmentAction()
+    {
+        return Action::make('reschedule_appointment')
+            ->label('Reschedule')
+            ->icon('heroicon-o-clock')
+            ->color('warning')
+            ->modalHeading('Reschedule Implementation Appointment')
+            ->form(function (?ImplementerAppointment $record = null) {
+                if (!$record) {
+                    return [
+                        TextInput::make('error')
+                            ->label('Error')
+                            ->default('No appointment record found.')
+                            ->disabled(),
+                    ];
+                }
+
+                return [
+                    Grid::make(3)
+                        ->schema([
+                            DatePicker::make('date')
+                                ->required()
+                                ->label('DATE (MONDAY-THURSDAY/FRIDAY)')
+                                ->default(function ($record = null) {
+                                    return $record ? $record->date : Carbon::today()->toDateString();
+                                })
+                                ->reactive()
+                                ->columnSpan(1),
+
+                            Select::make('session')
+                                ->label('SESSION')
+                                ->options(function (callable $get) {
+                                    $date = $get('date');
+                                    if (!$date) return [];
+
+                                    $selectedDate = Carbon::parse($date);
+                                    $dayOfWeek = $selectedDate->dayOfWeek;
+
+                                    // Friday sessions (dayOfWeek = 5)
+                                    if ($dayOfWeek === 5) {
+                                        return [
+                                            'SESSION 1' => 'SESSION 1 (0930 - 1030)',
+                                            'SESSION 2' => 'SESSION 2 (1100 - 1200)',
+                                            'SESSION 3' => 'SESSION 3 (1500 - 1600)',
+                                            'SESSION 4' => 'SESSION 4 (1630 - 1730)',
+                                        ];
+                                    }
+                                    // Monday to Thursday sessions (dayOfWeek = 1-4)
+                                    else if ($dayOfWeek >= 1 && $dayOfWeek <= 4) {
+                                        return [
+                                            'SESSION 1' => 'SESSION 1 (0930 - 1030)',
+                                            'SESSION 2' => 'SESSION 2 (1100 - 1200)',
+                                            'SESSION 3' => 'SESSION 3 (1400 - 1500)',
+                                            'SESSION 4' => 'SESSION 4 (1530 - 1630)',
+                                            'SESSION 5' => 'SESSION 5 (1700 - 1800)',
+                                        ];
+                                    }
+
+                                    // Weekend or invalid date
+                                    return ['NO_SESSIONS' => 'No sessions available on weekends'];
+                                })
+                                ->default(function (callable $get, $record = null) {
+                                    // If editing existing record, use its session value
+                                    if ($record && $record->session) {
+                                        return $record->session;
+                                    }
+
+                                    // For new records, select a default based on the day
+                                    $date = $get('date');
+                                    if (!$date) return null;
+
+                                    return 'SESSION 1';
+                                })
+                                ->columnSpan(2)
+                                ->required()
+                                ->reactive()
+                                ->afterStateUpdated(function ($state, callable $set, callable $get) {
+                                    // Set the start_time and end_time based on selected session
+                                    $times = [
+                                        'SESSION 1' => ['09:30', '10:30'],
+                                        'SESSION 2' => ['11:00', '12:00'],
+                                        'SESSION 3' => ['14:00', '15:00'],
+                                        'SESSION 4' => ['15:30', '16:30'], // Friday has different time
+                                        'SESSION 5' => ['17:00', '18:00'], // Friday has different time
+                                    ];
+
+                                    // Friday has different times for sessions 4 and 5
+                                    $date = $get('date');
+                                    if ($date) {
+                                        $carbonDate = Carbon::parse($date);
+                                        if ($carbonDate->dayOfWeek === 5) { // Friday
+                                            $times['SESSION 4'] = ['15:00', '16:00'];
+                                            $times['SESSION 5'] = ['16:30', '17:30'];
+                                        }
+                                    }
+
+                                    if (isset($times[$state])) {
+                                        $set('start_time', $times[$state][0]);
+                                        $set('end_time', $times[$state][1]);
+                                        $set('start_time_display', $times[$state][0]);
+                                        $set('end_time_display', $times[$state][1]);
+                                    }
+                                }),
+
+                            // Display-only time fields (non-editable)
+                            Hidden::make('start_time_display')
+                                ->label('START TIME')
+                                ->disabled()
+                                ->default(function (callable $get) {
+                                    $session = $get('session');
+                                    $date = $get('date');
+
+                                    if (!$session || !$date) {
+                                        return '09:30';  // Default to SESSION 1 start time
+                                    }
+
+                                    $times = [
+                                        'SESSION 1' => '09:30',
+                                        'SESSION 2' => '11:00',
+                                        'SESSION 3' => '14:00',
+                                        'SESSION 4' => '15:30',
+                                        'SESSION 5' => '17:00',
+                                    ];
+
+                                    // Adjust for Friday
+                                    $selectedDate = Carbon::parse($date);
+                                    if ($selectedDate->dayOfWeek === 5) { // Friday
+                                        $times['SESSION 4'] = '15:00';
+                                        $times['SESSION 5'] = '16:30';
+                                    }
+
+                                    return $times[$session] ?? '09:30';
+                                }),
+
+                            Hidden::make('end_time_display')
+                                ->label('END TIME')
+                                ->disabled()
+                                ->default(function (callable $get) {
+                                    $session = $get('session');
+                                    $date = $get('date');
+
+                                    if (!$session || !$date) {
+                                        return '10:30';  // Default to SESSION 1 end time
+                                    }
+
+                                    $times = [
+                                        'SESSION 1' => '10:30',
+                                        'SESSION 2' => '12:00',
+                                        'SESSION 3' => '15:00',
+                                        'SESSION 4' => '16:30',
+                                        'SESSION 5' => '18:00',
+                                    ];
+
+                                    // Adjust for Friday
+                                    $selectedDate = Carbon::parse($date);
+                                    if ($selectedDate->dayOfWeek === 5) { // Friday
+                                        $times['SESSION 4'] = '16:00';
+                                        $times['SESSION 5'] = '17:30';
+                                    }
+
+                                    return $times[$session] ?? '10:30';
+                                }),
+
+                            // These are hidden fields that will store the actual time values
+                            Hidden::make('start_time')
+                                ->default(function (callable $get) {
+                                    $session = $get('session');
+                                    $date = $get('date');
+
+                                    if (!$session || !$date) {
+                                        return '09:30';  // Default to SESSION 1 start time
+                                    }
+
+                                    $times = [
+                                        'SESSION 1' => '09:30',
+                                        'SESSION 2' => '11:00',
+                                        'SESSION 3' => '14:00',
+                                        'SESSION 4' => '15:30',
+                                        'SESSION 5' => '17:00',
+                                    ];
+
+                                    // Adjust for Friday
+                                    $selectedDate = Carbon::parse($date);
+                                    if ($selectedDate->dayOfWeek === 5) { // Friday
+                                        $times['SESSION 4'] = '15:00';
+                                        $times['SESSION 5'] = '16:30';
+                                    }
+
+                                    return $times[$session] ?? '09:30';
+                                })
+                                ->reactive()
+                                ->afterStateHydrated(function (callable $set, callable $get, $state) {
+                                    // Set initial state based on session when form first loads
+                                    $session = $get('session');
+                                    $date = $get('date');
+
+                                    if ($session && $date) {
+                                        $times = [
+                                            'SESSION 1' => '09:30',
+                                            'SESSION 2' => '11:00',
+                                            'SESSION 3' => '14:00',
+                                            'SESSION 4' => '15:30',
+                                            'SESSION 5' => '17:00',
+                                        ];
+
+                                        // Adjust for Friday
+                                        $selectedDate = Carbon::parse($date);
+                                        if ($selectedDate->dayOfWeek === 5) { // Friday
+                                            $times['SESSION 4'] = '15:00';
+                                            $times['SESSION 5'] = '16:30';
+                                        }
+
+                                        $set('start_time', $times[$session] ?? $state);
+                                    }
+                                }),
+
+                            Hidden::make('end_time')
+                                ->default(function (callable $get) {
+                                    $session = $get('session');
+                                    $date = $get('date');
+
+                                    if (!$session || !$date) {
+                                        return '10:30';  // Default to SESSION 1 end time
+                                    }
+
+                                    $times = [
+                                        'SESSION 1' => '10:30',
+                                        'SESSION 2' => '12:00',
+                                        'SESSION 3' => '15:00',
+                                        'SESSION 4' => '16:30',
+                                        'SESSION 5' => '18:00',
+                                    ];
+
+                                    // Adjust for Friday
+                                    $selectedDate = Carbon::parse($date);
+                                    if ($selectedDate->dayOfWeek === 5) { // Friday
+                                        $times['SESSION 4'] = '16:00';
+                                        $times['SESSION 5'] = '17:30';
+                                    }
+
+                                    return $times[$session] ?? '10:30';
+                                })
+                                ->reactive()
+                                ->afterStateHydrated(function (callable $set, callable $get, $state) {
+                                    // Set initial state based on session when form first loads
+                                    $session = $get('session');
+                                    $date = $get('date');
+
+                                    if ($session && $date) {
+                                        $times = [
+                                            'SESSION 1' => '10:30',
+                                            'SESSION 2' => '12:00',
+                                            'SESSION 3' => '15:00',
+                                            'SESSION 4' => '16:30',
+                                            'SESSION 5' => '18:00',
+                                        ];
+
+                                        // Adjust for Friday
+                                        $selectedDate = Carbon::parse($date);
+                                        if ($selectedDate->dayOfWeek === 5) { // Friday
+                                            $times['SESSION 4'] = '16:00';
+                                            $times['SESSION 5'] = '17:30';
+                                        }
+
+                                        $set('end_time', $times[$session] ?? $state);
+                                    }
+                                }),
+                        ]),
+
+                    Grid::make(3)
+                        ->schema([
+                            Select::make('type')
+                                ->options(function ($record = null) {
+                                    if (!$record) return ['KICK OFF MEETING SESSION' => 'KICK OFF MEETING SESSION'];
+
+                                    // Retrieve software handover information first
+                                    $softwareHandover = null;
+                                    if ($record->software_handover_id) {
+                                        $softwareHandover = SoftwareHandover::find($record->software_handover_id);
+                                    }
+
+                                    // Check if there are any existing kick-off meetings that are completed or scheduled
+                                    $hasKickoffAppointment = ImplementerAppointment::where('lead_id', $record->lead_id)
+                                        ->where('software_handover_id', $record->software_handover_id ?? 0)
+                                        ->where('type', 'KICK OFF MEETING SESSION')
+                                        ->whereIn('status', ['Done', 'New']) // Check for completed or scheduled kick-offs
+                                        ->exists();
+
+                                    // Also check if kick_off_meeting exists in the software handover record as a backup
+                                    $hasKickoffMeeting = $softwareHandover && !empty($softwareHandover->kick_off_meeting);
+
+                                    // If either condition is true, allow REVIEW SESSIONs
+                                    if ($hasKickoffAppointment || $hasKickoffMeeting) {
+                                        return [
+                                            'REVIEW SESSION' => 'REVIEW SESSION',
+                                        ];
+                                    } else {
+                                        return [
+                                            'KICK OFF MEETING SESSION' => 'KICK OFF MEETING SESSION',
+                                        ];
+                                    }
+                                })
+                                ->default(function ($record = null) {
+                                    if (!$record) return 'KICK OFF MEETING SESSION';
+
+                                    // Retrieve software handover information first
+                                    $softwareHandover = null;
+                                    if ($record->software_handover_id) {
+                                        $softwareHandover = SoftwareHandover::find($record->software_handover_id);
+                                    }
+
+                                    // Check if there are any existing kick-off meetings that are completed or scheduled
+                                    $hasKickoffAppointment = ImplementerAppointment::where('lead_id', $record->lead_id)
+                                        ->where('software_handover_id', $record->software_handover_id ?? 0)
+                                        ->where('type', 'KICK OFF MEETING SESSION')
+                                        ->whereIn('status', ['Completed', 'New'])
+                                        ->exists();
+
+                                    // Also check if kick_off_meeting exists in the software handover record as a backup
+                                    $hasKickoffMeeting = $softwareHandover && !empty($softwareHandover->kick_off_meeting);
+
+                                    // Set default based on whether any kick-off meeting exists
+                                    return ($hasKickoffAppointment || $hasKickoffMeeting)
+                                        ? 'REVIEW SESSION'
+                                        : 'KICK OFF MEETING SESSION';
+                                })
+                                ->required()
+                                ->label('SESSION TYPE')
+                                ->disabled() // Disable the field
+                                ->reactive()
+                                ->dehydrated(true),
+
+                            Select::make('appointment_type')
+                                ->options([
+                                    'ONLINE' => 'ONLINE',
+                                    'ONSITE' => 'ONSITE',
+                                    'INHOUSE' => 'INHOUSE',
+                                ])
+                                ->disabled()
+                                ->required()
+                                ->dehydrated(true)
+                                ->default('ONLINE')
+                                ->label('APPOINTMENT TYPE'),
+
+                            Select::make('implementer')
+                                ->label('IMPLEMENTER')
+                                ->options(function ($record = null) {
+                                    if (!$record) {
+                                        return User::whereIn('role_id', [4, 5])
+                                            ->orderBy('name')
+                                            ->get()
+                                            ->mapWithKeys(function ($tech) {
+                                                return [$tech->name => $tech->name];
+                                            })
+                                            ->toArray();
+                                    }
+
+                                    // If we found a software handover with an implementer, only show that implementer
+                                    if ($record->implementer) {
+                                        return [$record->implementer => $record->implementer];
+                                    }
+
+                                    // Fallback: if no software handover or no implementer assigned,
+                                    // show all implementers (role_id 4 or 5)
+                                    return User::whereIn('role_id', [4, 5])
+                                        ->orderBy('name')
+                                        ->get()
+                                        ->mapWithKeys(function ($tech) {
+                                            return [$tech->name => $tech->name];
+                                        })
+                                        ->toArray();
+                                })
+                                ->default(function ($record = null) {
+                                    // First try to get from existing record if editing
+                                    if ($record && $record->implementer) {
+                                        return $record->implementer;
+                                    }
+
+                                    // Default to null if nothing found
+                                    return null;
+                                })
+                                ->searchable()
+                                ->required()
+                                ->disabled(function ($record = null) {
+                                    // Disable the field if there's a software handover with an implementer
+                                    if (!$record) return false;
+
+                                    $softwareHandover = SoftwareHandover::where('lead_id', $record->lead_id)
+                                        ->latest()
+                                        ->first();
+
+                                    return $softwareHandover && $softwareHandover->implementer;
+                                })
+                                ->dehydrated(true)
+                                ->placeholder('Select a implementer'),
+                        ]),
+
+                    TextInput::make('required_attendees')
+                        ->label('REQUIRED ATTENDEES')
+                        ->default(function() use ($record) {
+                            if (!$record) return '';
+
+                            // Try to decode JSON if it exists
+                            if (!empty($record->required_attendees)) {
+                                try {
+                                    $attendees = json_decode($record->required_attendees, true);
+                                    if (is_array($attendees)) {
+                                        return implode(';', $attendees);
+                                    }
+                                    return $record->required_attendees;
+                                } catch (\Exception $e) {
+                                    return $record->required_attendees;
+                                }
+                            }
+                            return '';
+                        })
+                        ->disabled()
+                        ->dehydrated(true)
+                        ->helperText('Separate each email with a semicolon (e.g., email1;email2;email3).'),
+
+                    Textarea::make('remarks')
+                        ->label('REMARKS')
+                        ->rows(3)
+                        ->default($record->remarks ?? '')
+                        ->extraAlpineAttributes(['@input' => '$el.value = $el.value.toUpperCase()']),
+
+                    Hidden::make('type')
+                        ->default($record->type ?? 'KICK OFF MEETING SESSION'),
+                ];
+            })
+            ->visible(fn (ImplementerAppointment $record) =>
+                $record->status !== 'Cancelled' && $record->status !== 'Completed'
+            )
+            ->action(function (array $data, ImplementerAppointment $record, Component $livewire) {
+                // Store the previous appointment details for the notification
+                $oldDate = Carbon::parse($record->date)->format('d/m/Y');
+                $oldStartTime = Carbon::parse($record->start_time)->format('h:i A');
+                $oldEndTime = Carbon::parse($record->end_time)->format('h:i A');
+
+                // Process required attendees from form data
+                $requiredAttendeesInput = $data['required_attendees'] ?? '';
+                $attendeeEmails = [];
+                if (!empty($requiredAttendeesInput)) {
+                    $attendeeEmails = array_filter(array_map('trim', explode(';', $requiredAttendeesInput)));
+                }
+
+                // Update the appointment with new schedule
+                $record->update([
+                    'date' => $data['date'],
+                    'start_time' => $data['start_time'],
+                    'end_time' => $data['end_time'],
+                    'remarks' => $data['remarks'],
+                    'type' => $data['type'] ?? $record->type,
+                    'appointment_type' => $data['appointment_type'] ?? $record->appointment_type,
+                    'implementer' => $data['implementer'] ?? $record->implementer,
+                    'session' => $data['session'] ?? $record->session,
+                    'required_attendees' => !empty($attendeeEmails) ? json_encode($attendeeEmails) : null,
+                    'updated_at' => now(),
+                ]);
+
+                // Get company name with fallback
+                $companyName = 'N/A';
+                if ($record->lead && $record->lead->companyDetail) {
+                    $companyName = $record->lead->companyDetail->company_name;
+                } elseif ($record->softwareHandover) {
+                    $companyName = $record->softwareHandover->company_name ?? 'N/A';
+                }
+
+                $recipients = ['fazuliana.mohdarsad@timeteccloud.com']; // Always include admin
+
+                // Add required attendees from the form input
+                if (!empty($attendeeEmails)) {
+                    foreach ($attendeeEmails as $email) {
+                        if (filter_var($email, FILTER_VALIDATE_EMAIL) && !in_array($email, $recipients)) {
+                            $recipients[] = $email;
+                        }
+                    }
+                }
+
+                // Ensure recipients are unique
+                $viewName = 'emails.implementer_appointment_reschedule';
+
+                $recipients = array_unique($recipients);
+                $authUser = auth()->user();
+                $senderEmail = $authUser->email;
+                $senderName = $authUser->name;
+
+                // Prepare email content with reschedule reason
+                $emailContent = [
+                    'lead' => [
+                        'company' => $companyName,
+                        'implementerName' => $record->implementer ?? 'N/A',
+                        'date' => Carbon::parse($data['date'])->format('d/m/Y'),
+                        'startTime' => Carbon::parse($data['start_time'])->format('h:i A'),
+                        'endTime' => Carbon::parse($data['end_time'])->format('h:i A'),
+                        'oldDate' => $oldDate,
+                        'oldStartTime' => $oldStartTime,
+                        'oldEndTime' => $oldEndTime,
+                        'rescheduleReason' => $data['reschedule_reason'] ?? 'No reason provided',
+                    ],
+                ];
+
+                // Update Teams meeting
+                self::updateTeamsMeeting($record, $data, $companyName);
+
+                try {
+                    // Send email with template and custom subject format
+                    if (count($recipients) > 0) {
+                        Mail::send($viewName, ['content' => $emailContent], function ($message) use ($recipients, $senderEmail, $senderName, $data, $companyName) {
+                            $message->from($senderEmail, $senderName)
+                                ->to($recipients)
+                                ->cc($senderEmail)
+                                ->subject("TIMETEC IMPLEMENTATION APPOINTMENT | {$data['type']} | {$companyName} | " . Carbon::parse($data['date'])->format('d/m/Y'));
+                        });
+
+                        Notification::make()
+                            ->title('Implementation appointment notification sent')
+                            ->success()
+                            ->body('Email notification sent to administrator and required attendees')
+                            ->send();
+                    }
+                } catch (\Exception $e) {
+                    // Handle email sending failure
+                    Log::error("Email sending failed for implementation appointment: Error: {$e->getMessage()}");
+
+                    Notification::make()
+                        ->title('Email Notification Failed')
+                        ->danger()
+                        ->body('Could not send email notification: ' . $e->getMessage())
+                        ->send();
+                }
+
+                Notification::make()
+                    ->title('Implementation Appointment Rescheduled Successfully')
+                    ->success()
+                    ->send();
+
+                if (method_exists($livewire, 'refreshData')) {
+                    $livewire->refreshData();
+                }
+
+                $livewire->dispatch('refresh-salesperson-tables');
+            });
+    }
+
+    /**
+     * Get the cancel implementation appointment action
+     *
+     * @return \Filament\Tables\Actions\Action
+     */
+    public static function cancelAppointmentAction()
+    {
+        return Action::make('cancel_appointment')
+            ->label('Cancel')
+            ->icon('heroicon-o-x-circle')
+            ->color('danger')
+            ->requiresConfirmation()
+            ->modalHeading('Cancel Implementation Appointment')
+            ->modalDescription('Are you sure you want to cancel this appointment? This will also cancel any associated Teams meetings.')
+            ->modalSubmitActionLabel('Yes, Cancel Appointment')
+            ->modalIcon('heroicon-o-exclamation-triangle')
+            ->visible(fn (ImplementerAppointment $record) =>
+                $record->status !== 'Cancelled' && $record->status !== 'Completed')
+            ->action(function (ImplementerAppointment $record, Component $livewire) {
+                if (!$record) {
+                    Notification::make()
+                        ->title('Appointment not found')
+                        ->danger()
+                        ->send();
+                    return;
+                }
+
+                try {
+                    // Update status to Cancelled
+                    $record->status = 'Cancelled';
+                    $record->request_status = 'CANCELLED';
+
+                    // Cancel Teams meeting if exists
+                    if ($record->event_id) {
+                        $eventId = $record->event_id;
+
+                        // Get implementer's email instead of using organizer_email
+                        $implementer = User::where('name', $record->implementer)->first();
+
+                        if ($implementer && $implementer->email) {
+                            $implementerEmail = $implementer->email;
+
+                            try {
+                                $accessToken = MicrosoftGraphService::getAccessToken();
+                                $graph = new Graph();
+                                $graph->setAccessToken($accessToken);
+
+                                // Cancel the Teams meeting using implementer's email
+                                $graph->createRequest("DELETE", "/users/$implementerEmail/events/$eventId")->execute();
+
+                                Notification::make()
+                                    ->title('Teams Meeting Cancelled Successfully')
+                                    ->warning()
+                                    ->body('The meeting has been cancelled in Microsoft Teams.')
+                                    ->send();
+
+                            } catch (\Exception $e) {
+                                Log::error('Failed to cancel Teams meeting: ' . $e->getMessage(), [
+                                    'event_id' => $eventId,
+                                    'implementer' => $implementerEmail,
+                                    'trace' => $e->getTraceAsString()
+                                ]);
+
+                                Notification::make()
+                                    ->title('Failed to Cancel Teams Meeting')
+                                    ->warning()
+                                    ->body('The appointment was cancelled, but there was an error cancelling the Teams meeting: ' . $e->getMessage())
+                                    ->send();
+                            }
+                        } else {
+                            Log::error('Failed to cancel Teams meeting: Implementer email not found', [
+                                'event_id' => $eventId,
+                                'implementer_name' => $record->implementer
+                            ]);
+
+                            Notification::make()
+                                ->title('Failed to Cancel Teams Meeting')
+                                ->warning()
+                                ->body('The appointment was cancelled, but the implementer email was not found.')
+                                ->send();
+                        }
+                    }
+
+                    if ($record->lead_id) {
+                        try {
+                            // Find the customer associated with this lead
+                            $customer = \App\Models\Customer::where('lead_id', $record->lead_id)->first();
+
+                            if ($customer) {
+                                // Update customer's able_set_meeting to true
+                                $customer->update(['able_set_meeting' => true]);
+
+                                Log::info('Customer able_set_meeting enabled after implementer action cancellation', [
+                                    'customer_id' => $customer->id,
+                                    'customer_email' => $customer->email,
+                                    'appointment_id' => $record->id,
+                                    'company_name' => $customer->company_name,
+                                    'cancelled_by' => auth()->user()->name,
+                                    'cancellation_type' => 'implementer_action_cancellation'
+                                ]);
+                            } else {
+                                Log::warning('Customer not found for lead_id during implementer action cancellation', [
+                                    'lead_id' => $record->lead_id,
+                                    'appointment_id' => $record->id
+                                ]);
+                            }
+                        } catch (\Exception $e) {
+                            Log::error('Failed to update customer able_set_meeting during implementer action cancellation: ' . $e->getMessage(), [
+                                'appointment_id' => $record->id,
+                                'lead_id' => $record->lead_id,
+                                'trace' => $e->getTraceAsString()
+                            ]);
+                        }
+                    }
+
+                    $record->save();
+
+                    // Send email notification about cancellation
+                    self::sendCancellationEmail($record);
+
+                    Notification::make()
+                        ->title('Appointment cancelled successfully')
+                        ->success()
+                        ->send();
+
+                    // Refresh the Livewire component if it has a refreshData method
+                    if (method_exists($livewire, 'refreshData')) {
+                        $livewire->refreshData();
+                    }
+                } catch (\Exception $e) {
+                    Notification::make()
+                        ->title('Error cancelling appointment')
+                        ->body($e->getMessage())
+                        ->danger()
+                        ->send();
+                }
+            });
+    }
+
+    /**
+     * Update Teams meeting for an implementer appointment
+     *
+     * @param ImplementerAppointment $record
+     * @param array $data
+     * @param string $companyName
+     * @return void
+     */
+    private static function updateTeamsMeeting(ImplementerAppointment $record, array $data, string $companyName)
+    {
+        try {
+            $accessToken = MicrosoftGraphService::getAccessToken();
+            $graph = new Graph();
+            $graph->setAccessToken($accessToken);
+
+            $startTime = Carbon::parse($data['date'] . ' ' . $data['start_time'])->timezone('UTC')->format('Y-m-d\TH:i:s\Z');
+            $endTime = Carbon::parse($data['date'] . ' ' . $data['end_time'])->timezone('UTC')->format('Y-m-d\TH:i:s\Z');
+
+            $implementer = User::where('name', $record->implementer)->first();
+            $organizerEmail = $implementer->email ?? null;
+
+            if (!$organizerEmail) {
+                Notification::make()
+                    ->title('Missing Organizer Email')
+                    ->danger()
+                    ->body('Implementer email is not available.')
+                    ->send();
+                return;
+            }
+
+            if ($record->event_id) {
+                $meetingUpdatePayload = [
+                    'start' => ['dateTime' => $startTime, 'timeZone' => 'Asia/Kuala_Lumpur'],
+                    'end' => ['dateTime' => $endTime, 'timeZone' => 'Asia/Kuala_Lumpur'],
+                    'subject' => 'TIMETEC | ' . $companyName,
+                ];
+
+                $response = $graph->createRequest("PATCH", "/users/$organizerEmail/events/{$record->event_id}")
+                    ->attachBody($meetingUpdatePayload)
+                    ->execute();
+
+                $eventData = $response->getBody(); // associative array
+
+                // Extract the meeting details
+                $joinUrl = $eventData['onlineMeeting']['joinUrl'] ?? null;
+                $eventId = $eventData['id'] ?? $record->event_id;
+
+                // Update the record with the meeting details
+                $record->update([
+                    'event_id' => $eventId,
+                    'meeting_link' => $joinUrl,
+                ]);
+                Log::info('Teams meeting updated successfully', [
+                    'event_id' => $eventId,
+                    'join_url' => $joinUrl,
+                    'implementer' => $organizerEmail,
+                ]);
+                Notification::make()
+                    ->title('Meeting Updated')
+                    ->success()
+                    ->body('The implementation appointment and Teams meeting have been updated.')
+                    ->send();
+            }
+        } catch (\Exception $e) {
+            Log::error('Teams Meeting Reschedule Failed: ' . $e->getMessage());
+            Notification::make()
+                ->title('Rescheduling Failed')
+                ->danger()
+                ->body($e->getMessage())
+                ->send();
+        }
+    }
+
+    /**
+     * Send cancellation email for an implementer appointment
+     *
+     * @param ImplementerAppointment $appointment
+     * @return bool
+     */
+    private static function sendCancellationEmail($appointment)
+    {
+        try {
+            $recipients = ['fazuliana.mohdarsad@timeteccloud.com']; // Default recipient
+
+            // Add required attendees from appointment if available
+            if (!empty($appointment->required_attendees)) {
+                try {
+                    $attendees = json_decode($appointment->required_attendees, true);
+                    if (is_array($attendees)) {
+                        foreach ($attendees as $email) {
+                            if (filter_var($email, FILTER_VALIDATE_EMAIL) && !in_array($email, $recipients)) {
+                                $recipients[] = $email;
+                            }
+                        }
+                    }
+                } catch (\Exception $e) {
+                    Log::error('Error processing attendees: ' . $e->getMessage());
+                }
+            }
+
+            // Get company name with fallback
+            $companyName = 'N/A';
+            if ($appointment->softwareHandover) {
+                $companyName = $appointment->softwareHandover->company_name ?? 'N/A';
+            } elseif ($appointment->lead && $appointment->lead->companyDetail) {
+                $companyName = $appointment->lead->companyDetail->company_name;
+            }
+
+            // Format dates for email
+            $appointmentDate = Carbon::parse($appointment->date)->format('d/m/Y');
+            $startTime = Carbon::parse($appointment->start_time)->format('h:i A');
+            $endTime = Carbon::parse($appointment->end_time)->format('h:i A');
+
+            // Prepare email content
+            $emailContent = [
+                'companyName' => $companyName,
+                'implementer' => $appointment->implementer ?? 'N/A',
+                'date' => $appointmentDate,
+                'time' => $startTime . ' - ' . $endTime,
+                'appointmentType' => $appointment->type ?? 'N/A',
+                'reason' => 'Appointment has been cancelled by ' . auth()->user()->name,
+            ];
+
+            $authUser = auth()->user();
+            $senderEmail = $authUser->email;
+            $senderName = $authUser->name;
+
+            // Send email
+            Mail::send(
+                'emails.implementer_appointment_cancel',
+                ['content' => $emailContent],
+                function ($message) use ($recipients, $senderEmail, $senderName, $appointment, $companyName, $appointmentDate) {
+                    $message->from($senderEmail, $senderName)
+                        ->to($recipients)
+                        ->cc($senderEmail)
+                        ->subject("CANCELLED: TIMETEC IMPLEMENTATION APPOINTMENT | {$appointment->type} | {$companyName} | {$appointmentDate}");
+                }
+            );
+
+            return true;
+        } catch (\Exception $e) {
+            Log::error('Failed to send cancellation email: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    public static function addImplementerFollowUp(): Action
+    {
+        return Action::make('add_follow_up')
+            ->label('Add Follow-up')
+            ->color('primary')
+            ->icon('heroicon-o-plus')
+            ->modalWidth('6xl')
+            ->modalHeading(function (SoftwareHandover $record) {
+                // Get company name
+                $companyName = $record->company_name ?? 'Unknown Company';
+
+                // If company_name is not available in SoftwareHandover, try to get it from Lead
+                if (empty($companyName) || $companyName === 'Unknown Company') {
+                    if ($record->lead_id) {
+                        $lead = \App\Models\Lead::find($record->lead_id);
+                        if ($lead && $lead->companyDetail) {
+                            $companyName = $lead->companyDetail->company_name ?? 'Unknown Company';
+                        }
+                    }
+                }
+
+                // Get current follow-up count for context
+                $currentCount = $record->manual_follow_up_count ?? 0;
+
+                return "Add Follow-up for {$companyName}";
+            })
+            ->form([
+                Grid::make(5)
+                    ->schema([
+                        DatePicker::make('follow_up_date')
+                            ->label('Next Follow-up Date')
+                            ->native(false)
+                            ->displayFormat('d M Y')
+                            ->default(function() {
+                                $today = now();
+                                $daysUntilNextTuesday = (9 - $today->dayOfWeek) % 7; // 2 is Tuesday, but we add 7 to ensure positive
+                                if ($daysUntilNextTuesday === 0) {
+                                    $daysUntilNextTuesday = 7; // If today is Tuesday, we want next Tuesday
+                                }
+                                return $today->addDays($daysUntilNextTuesday);
+                            })
+                            ->minDate(now()->subDay())
+                            ->disabledDates(function () {
+                                // Disable all weekend dates (Saturday and Sunday)
+                                $disabledDates = [];
+                                $startDate = now()->subDay();
+                                $endDate = now()->addYear(); // Check dates for next year
+
+                                for ($date = $startDate->copy(); $date <= $endDate; $date->addDay()) {
+                                    // 0 = Sunday, 6 = Saturday
+                                    if ($date->dayOfWeek === 0 || $date->dayOfWeek === 6) {
+                                        $disabledDates[] = $date->format('Y-m-d');
+                                    }
+                                }
+
+                                return $disabledDates;
+                            })
+                            ->required(),
+
+                        Select::make('project_priority')
+                            ->label('Project Priority')
+                            ->required()
+                            ->options([
+                                'High' => 'High',
+                                'Medium' => 'Medium',
+                                'Low' => 'Low',
+                            ])
+                            ->default(function (SoftwareHandover $record) {
+                                // ✅ Get the current value from database, fallback to MEDIUM if null
+                                return $record->project_priority ?? 'Medium';
+                            }),
+
+                        Select::make('manual_follow_up_count')
+                            ->label('Follow Up Count')
+                            ->required()
+                            ->live()
+                            ->options([
+                                0 => '0',
+                                1 => '1',
+                                2 => '2',
+                                3 => '3',
+                                4 => '4',
+                            ])
+                            ->default(function (SoftwareHandover $record = null) {
+                                if (!$record) return 0;
+
+                                // Get current follow-up count from database
+                                $currentCount = $record->manual_follow_up_count ?? 0;
+
+                                // Increment by 1, but loop back to 0 if it's already at 4
+                                $nextCount = ($currentCount >= 4) ? 0 : $currentCount + 1;
+
+                                return $nextCount;
+                            }),
+
+                        Toggle::make('send_email')
+                            ->label('Send Email to Customer?')
+                            ->onIcon('heroicon-o-bell-alert')
+                            ->offIcon('heroicon-o-bell-slash')
+                            ->onColor('primary')
+                            ->inline(false)
+                            ->offColor('gray')
+                            ->default(false)
+                            ->live(onBlur: true),
+
+                        // Scheduler Type options
+                        Select::make('scheduler_type')
+                            ->label('Scheduler Type')
+                            ->options([
+                                'instant' => 'Instant',
+                                'scheduled' => 'Next Follow Up Date at 8am',
+                                'both' => 'Both'
+                            ])
+                            ->visible(fn ($get) => $get('send_email'))
+                            ->required(),
+                    ]),
+
+                Fieldset::make('Email Details')
+                    ->schema([
+                        TextInput::make('required_attendees')
+                            ->label('Required Attendees')
+                            ->default(function (SoftwareHandover $record = null) {
+                                if (!$record) return null;
+
+                                // Initialize emails array to store all collected emails
+                                $emails = [];
+
+                                // 1. Get emails from SoftwareHandover implementation_pics
+                                if (!empty($record->implementation_pics) && is_string($record->implementation_pics)) {
+                                    try {
+                                        $contacts = json_decode($record->implementation_pics, true);
+
+                                        // If it's valid JSON array, extract emails
+                                        if (is_array($contacts)) {
+                                            foreach ($contacts as $contact) {
+                                                // Check if email exists and is valid
+                                                if (!empty($contact['pic_email_impl'])) {
+                                                    $email = trim($contact['pic_email_impl']);
+                                                    if (filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                                                        // Only include PICs with "Available" status IF status field exists
+                                                        // If no status field, include all valid emails
+                                                        if (!isset($contact['status']) || $contact['status'] === 'Available') {
+                                                            $emails[] = $email;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    } catch (\Exception $e) {
+                                        \Illuminate\Support\Facades\Log::error('Error parsing implementation_pics JSON: ' . $e->getMessage());
+                                    }
+                                }
+
+                                // 2. Get emails from company_detail->additional_pic
+                                if ($record->lead_id) {
+                                    $lead = \App\Models\Lead::find($record->lead_id);
+                                    if ($lead && $lead->companyDetail && !empty($lead->companyDetail->additional_pic)) {
+                                        try {
+                                            $additionalPics = json_decode($lead->companyDetail->additional_pic, true);
+
+                                            if (is_array($additionalPics)) {
+                                                foreach ($additionalPics as $pic) {
+                                                    // Only include contacts with "Available" status (not "Resign")
+                                                    if (
+                                                        !empty($pic['email']) &&
+                                                        isset($pic['status']) &&
+                                                        $pic['status'] !== 'Resign'
+                                                    ) {
+                                                        $email = trim($pic['email']);
+                                                        if (filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                                                            $emails[] = $email;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        } catch (\Exception $e) {
+                                            \Illuminate\Support\Facades\Log::error('Error parsing additional_pic JSON: ' . $e->getMessage());
+                                        }
+                                    }
+                                }
+
+                                // // 3. Get salesperson email
+                                // if ($record->lead_id) {
+                                //     $lead = \App\Models\Lead::find($record->lead_id);
+                                //     if ($lead && !empty($lead->salesperson)) {
+                                //         // Find the user with this salesperson ID
+                                //         $salesperson = \App\Models\User::where('id', $lead->salesperson)->first();
+
+                                //         if ($salesperson && !empty($salesperson->email)) {
+                                //             $email = trim($salesperson->email);
+                                //             if (filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                                //                 $emails[] = $email;
+                                //             }
+                                //         }
+                                //     }
+                                // }
+
+                                // Remove duplicates and return as semicolon-separated string
+                                $uniqueEmails = array_unique($emails);
+                                return !empty($uniqueEmails) ? implode(';', $uniqueEmails) : null;
+                            })
+                            ->helperText('Separate each email with a semicolon (e.g., email1;email2;email3).'),
+
+                        Select::make('email_template')
+                            ->label('Email Template')
+                            ->options(function () {
+                                return EmailTemplate::whereIn('type', ['implementer'])
+                                    ->pluck('name', 'id')
+                                    ->toArray();
+                            })
+                            ->searchable()
+                            ->preload()
+                            ->reactive()
+                            ->afterStateUpdated(function ($state, callable $set) {
+                                if ($state) {
+                                    $template = EmailTemplate::find($state);
+                                    if ($template) {
+                                        $set('email_subject', $template->subject);
+                                        $set('email_content', $template->content);
+                                    }
+                                }
+                            })
+                            ->required(),
+
+                        TextInput::make('email_subject')
+                            ->label('Email Subject')
+                            ->required(),
+
+                        RichEditor::make('email_content')
+                            ->label('Email Content')
+                            ->disableToolbarButtons([
+                                'attachFiles',
+                            ])
+                            ->required(),
+                    ])
+                    ->visible(fn ($get) => $get('send_email')),
+
+                Hidden::make('implementer_name')
+                    ->label('NAME')
+                    ->default(auth()->user()->name ?? '')
+                    ->required(),
+
+                Hidden::make('implementer_designation')
+                    ->label('DESIGNATION')
+                    ->default('Implementer')
+                    ->required(),
+
+                Hidden::make('implementer_company')
+                    ->label('COMPANY NAME')
+                    ->default('TimeTec Cloud Sdn Bhd')
+                    ->required(),
+
+                Hidden::make('implementer_phone')
+                    ->label('PHONE NO')
+                    ->default('03-80709933')
+                    ->required(),
+
+                Hidden::make('implementer_email')
+                    ->label('EMAIL')
+                    ->default(auth()->user()->email ?? '')
+                    ->required(),
+
+                RichEditor::make('notes')
+                    ->label('Remarks')
+                    ->disableToolbarButtons([
+                        'attachFiles',
+                        'blockquote',
+                        'codeBlock',
+                        'h2',
+                        'h3',
+                        'link',
+                        'redo',
+                        'strike',
+                        'undo',
+                    ])
+                    ->extraInputAttributes(['style' => 'text-transform: uppercase'])
+                    ->afterStateHydrated(fn($state) => Str::upper($state))
+                    ->afterStateUpdated(fn($state) => Str::upper($state))
+                    ->placeholder('Add your follow-up details here...')
+                    ->required()
+                ])
+            ->modalSubmitAction(function ($action) {
+                return $action->extraAttributes([
+                    'x-show' => '$wire.mountedTableActionsData?.[0]?.manual_follow_up_count != 4',
+                ]);
+            })
+            ->extraModalFooterActions(fn () => [
+                Action::make('submit_and_inactive')
+                    ->label('Submit & Change to InActive')
+                    ->color('danger')
+                    ->icon('heroicon-o-x-circle')
+                    ->extraAttributes([
+                        'x-show' => '$wire.mountedTableActionsData?.[0]?.manual_follow_up_count == 4',
+                        'style' => 'display: none;',
+                    ])
+                    ->alpineClickHandler("
+                        let data = \$wire.mountedTableActionsData?.[0];
+                        let notesText = (data?.notes || '').replace(/<[^>]*>/g, '').trim();
+                        let valid = data?.follow_up_date && notesText && data?.project_priority;
+                        if (data?.send_email) {
+                            let contentText = (data?.email_content || '').replace(/<[^>]*>/g, '').trim();
+                            valid = valid && data?.scheduler_type && (data?.required_attendees || '').trim() && data?.email_template && (data?.email_subject || '').trim() && contentText;
+                        }
+                        if (!valid) {
+                            \$wire.callMountedTableAction();
+                            return;
+                        }
+
+                        let parentModal = \$el.closest('.fi-modal');
+                        if (parentModal) parentModal.style.display = 'none';
+
+                        let overlay = document.createElement('div');
+                        overlay.id = 'confirm-inactive-overlay';
+                        overlay.style.cssText = 'position:fixed;inset:0;z-index:999;display:flex;align-items:flex-start;justify-content:center;padding-top:20vh;';
+                        overlay.innerHTML = `
+                            <div style=\"position:fixed;inset:0;background:rgba(0,0,0,0.5)\"></div>
+                            <div style=\"position:relative;max-width:28rem;width:100%;margin:1rem;border-radius:0.75rem;background:white;box-shadow:0 25px 50px -12px rgba(0,0,0,0.25);overflow:hidden\" class=\"dark:bg-gray-900\">
+                                <div style=\"padding:1.5rem;text-align:center\">
+                                    <h2 style=\"font-size:1rem;font-weight:600;color:#111827\" class=\"dark:text-white\">Confirm Status Change</h2>
+                                    <p style=\"margin-top:1rem;font-size:0.875rem;color:#6b7280\" class=\"dark:text-gray-400\">Are you sure you want to submit this follow-up and change the project status to <strong>InActive</strong>?</p>
+                                </div>
+                                <div style=\"display:flex;flex-direction:row;gap:0.75rem;border-top:1px solid #e5e7eb;padding:1rem 1.5rem\" class=\"dark:border-white/10\">
+                                    <button type=\"button\" id=\"confirm-inactive-cancel\" style=\"flex:1;font-size:0.875rem;font-weight:600;padding:0.5rem 1rem;border-radius:0.5rem;border:1px solid #d1d5db;background:white;color:#111827;cursor:pointer\" class=\"dark:bg-white/5 dark:text-white dark:border-white/20\">Cancel</button>
+                                    <button type=\"button\" id=\"confirm-inactive-yes\" style=\"flex:1;font-size:0.875rem;font-weight:600;padding:0.5rem 1rem;border-radius:0.5rem;border:none;background:#dc2626;color:white;cursor:pointer\">Yes, Change to InActive</button>
+                                </div>
+                            </div>
+                        `;
+                        document.body.appendChild(overlay);
+
+                        overlay.querySelector('#confirm-inactive-cancel').onclick = () => {
+                            overlay.remove();
+                            if (parentModal) parentModal.style.display = '';
+                        };
+
+                        overlay.querySelector('#confirm-inactive-yes').onclick = () => {
+                            overlay.remove();
+                            \$wire.callMountedTableAction();
+                        };
+                    "),
+            ])
+            ->action(function (SoftwareHandover $record, array $data, $livewire) {
+                self::processFollowUpWithEmail($record, $data);
+
+                // If follow-up count is 4, change status to InActive
+                if (($data['manual_follow_up_count'] ?? 0) == 4) {
+                    $record->update([
+                        'status_handover' => 'InActive',
+                    ]);
+
+                    ImplementerLogs::create([
+                        'subject_id' => $record->id,
+                        'log_type' => 'status_change',
+                        'description' => 'Project marked as InActive',
+                        'remark' => 'Project marked as InActive (Follow-up count reached 4)',
+                        'causer_id' => auth()->id(),
+                        'lead_id' => $record->lead_id,
+                    ]);
+
+                    Notification::make()
+                        ->title('Follow-up added & project status changed to InActive')
+                        ->warning()
+                        ->send();
+
+                    $livewire->dispatch('refresh-implementer-tables');
+                    return;
+                }
+
+                $livewire->dispatch('refresh-implementer-tables');
+            });
+    }
+
+    /**
+     * Add implementer follow-up action for Lead context (used in LeadResource tabs).
+     * Returns a Form Component Action (not a Table Action).
+     */
+    public static function addImplementerFollowUpForLead(): \Filament\Forms\Components\Actions\Action
+    {
+        return \Filament\Forms\Components\Actions\Action::make('add_follow_up')
+            ->label('Add Follow-Up')
+            ->button()
+            ->color('primary')
+            ->icon('heroicon-o-plus')
+            ->modalWidth('6xl')
+            ->modalHeading(function (Lead $record) {
+                $companyName = 'Unknown Company';
+
+                if ($record->companyDetail && $record->companyDetail->company_name) {
+                    $companyName = $record->companyDetail->company_name;
+                } else {
+                    $softwareHandover = SoftwareHandover::where('lead_id', $record->id)->latest()->first();
+                    if ($softwareHandover && $softwareHandover->company_name) {
+                        $companyName = $softwareHandover->company_name;
+                    }
+                }
+
+                return "Add Follow-up for {$companyName}";
+            })
+            ->form([
+                Grid::make(5)
+                    ->schema([
+                        DatePicker::make('follow_up_date')
+                            ->label('Next Follow-up Date')
+                            ->native(false)
+                            ->displayFormat('d M Y')
+                            ->default(function () {
+                                $today = now();
+                                $daysUntilNextTuesday = (9 - $today->dayOfWeek) % 7;
+                                if ($daysUntilNextTuesday === 0) {
+                                    $daysUntilNextTuesday = 7;
+                                }
+                                return $today->addDays($daysUntilNextTuesday);
+                            })
+                            ->minDate(now()->subDay())
+                            ->disabledDates(function () {
+                                $disabledDates = [];
+                                $startDate = now()->subDay();
+                                $endDate = now()->addYear();
+
+                                for ($date = $startDate->copy(); $date <= $endDate; $date->addDay()) {
+                                    if ($date->dayOfWeek === 0 || $date->dayOfWeek === 6) {
+                                        $disabledDates[] = $date->format('Y-m-d');
+                                    }
+                                }
+
+                                return $disabledDates;
+                            })
+                            ->required(),
+
+                        Select::make('project_priority')
+                            ->label('Project Priority')
+                            ->required()
+                            ->options([
+                                'High' => 'High',
+                                'Medium' => 'Medium',
+                                'Low' => 'Low',
+                            ])
+                            ->default(function ($component) {
+                                try {
+                                    $livewire = $component->getLivewire();
+                                    $record = $livewire->getRecord();
+                                    if (!$record) return 'Medium';
+
+                                    $softwareHandover = SoftwareHandover::where('lead_id', $record->id)->latest()->first();
+                                    return $softwareHandover->project_priority ?? 'Medium';
+                                } catch (\Exception $e) {
+                                    return 'Medium';
+                                }
+                            }),
+
+                        Select::make('manual_follow_up_count')
+                            ->label('Follow Up Count')
+                            ->required()
+                            ->live()
+                            ->options([
+                                0 => '0',
+                                1 => '1',
+                                2 => '2',
+                                3 => '3',
+                                4 => '4',
+                            ])
+                            ->default(function ($component) {
+                                try {
+                                    $livewire = $component->getLivewire();
+                                    $record = $livewire->getRecord();
+                                    if (!$record) return 1;
+
+                                    $softwareHandover = SoftwareHandover::where('lead_id', $record->id)->latest()->first();
+                                    if (!$softwareHandover) return 1;
+
+                                    $currentCount = $softwareHandover->manual_follow_up_count ?? 0;
+                                    return ($currentCount >= 4) ? 0 : $currentCount + 1;
+                                } catch (\Exception $e) {
+                                    return 1;
+                                }
+                            }),
+
+                        Toggle::make('send_email')
+                            ->label('Send Email to Customer?')
+                            ->onIcon('heroicon-o-bell-alert')
+                            ->offIcon('heroicon-o-bell-slash')
+                            ->onColor('primary')
+                            ->inline(false)
+                            ->offColor('gray')
+                            ->default(false)
+                            ->live(onBlur: true),
+
+                        Select::make('scheduler_type')
+                            ->label('Scheduler Type')
+                            ->options([
+                                'instant' => 'Instant',
+                                'scheduled' => 'Next Follow Up Date at 8am',
+                                'both' => 'Both',
+                            ])
+                            ->visible(fn ($get) => $get('send_email'))
+                            ->required(),
+                    ]),
+
+                Fieldset::make('Email Details')
+                    ->schema([
+                        TextInput::make('required_attendees')
+                            ->label('Required Attendees')
+                            ->default(function (Lead $record = null) {
+                                if (!$record) return null;
+
+                                $emails = [];
+
+                                $softwareHandover = SoftwareHandover::where('lead_id', $record->id)->latest()->first();
+
+                                if ($softwareHandover && !empty($softwareHandover->implementation_pics) && is_string($softwareHandover->implementation_pics)) {
+                                    try {
+                                        $contacts = json_decode($softwareHandover->implementation_pics, true);
+                                        if (is_array($contacts)) {
+                                            foreach ($contacts as $contact) {
+                                                if (!empty($contact['pic_email_impl'])) {
+                                                    $email = trim($contact['pic_email_impl']);
+                                                    if (filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                                                        if (!isset($contact['status']) || $contact['status'] === 'Available') {
+                                                            $emails[] = $email;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    } catch (\Exception $e) {
+                                        Log::error('Error parsing implementation_pics JSON: ' . $e->getMessage());
+                                    }
+                                }
+
+                                if ($record->companyDetail && !empty($record->companyDetail->additional_pic)) {
+                                    try {
+                                        $additionalPics = json_decode($record->companyDetail->additional_pic, true);
+                                        if (is_array($additionalPics)) {
+                                            foreach ($additionalPics as $pic) {
+                                                if (
+                                                    !empty($pic['email']) &&
+                                                    isset($pic['status']) &&
+                                                    $pic['status'] !== 'Resign'
+                                                ) {
+                                                    $email = trim($pic['email']);
+                                                    if (filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                                                        $emails[] = $email;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    } catch (\Exception $e) {
+                                        Log::error('Error parsing additional_pic JSON: ' . $e->getMessage());
+                                    }
+                                }
+
+                                $uniqueEmails = array_unique($emails);
+                                return !empty($uniqueEmails) ? implode(';', $uniqueEmails) : null;
+                            })
+                            ->helperText('Separate each email with a semicolon (e.g., email1;email2;email3).'),
+
+                        Select::make('email_template')
+                            ->label('Email Template')
+                            ->options(function () {
+                                return EmailTemplate::whereIn('type', ['implementer'])
+                                    ->pluck('name', 'id')
+                                    ->toArray();
+                            })
+                            ->searchable()
+                            ->preload()
+                            ->reactive()
+                            ->afterStateUpdated(function ($state, callable $set) {
+                                if ($state) {
+                                    $template = EmailTemplate::find($state);
+                                    if ($template) {
+                                        $set('email_subject', $template->subject);
+                                        $set('email_content', $template->content);
+                                    }
+                                }
+                            })
+                            ->required(),
+
+                        TextInput::make('email_subject')
+                            ->label('Email Subject')
+                            ->required(),
+
+                        RichEditor::make('email_content')
+                            ->label('Email Content')
+                            ->disableToolbarButtons(['attachFiles'])
+                            ->required(),
+
+                        FileUpload::make('project_plan_attachments')
+                            ->label('Email Attachment')
+                            ->multiple()
+                            ->maxFiles(5)
+                            ->maxSize(10240)
+                            ->acceptedFileTypes([
+                                'application/pdf',
+                                'application/vnd.ms-excel',
+                                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                            ])
+                            ->directory('implementer_follow_up_attachments')
+                            ->preserveFilenames()
+                            ->helperText('Up to 5 files (PDF or Excel), 10MB each.'),
+                    ])
+                    ->visible(fn ($get) => $get('send_email')),
+
+                Hidden::make('implementer_name')
+                    ->default(auth()->user()->name ?? ''),
+
+                Hidden::make('implementer_designation')
+                    ->default('Implementer'),
+
+                Hidden::make('implementer_company')
+                    ->default('TimeTec Cloud Sdn Bhd'),
+
+                Hidden::make('implementer_phone')
+                    ->default('03-80709933'),
+
+                Hidden::make('implementer_email')
+                    ->default(auth()->user()->email ?? ''),
+
+                RichEditor::make('notes')
+                    ->label('Remarks')
+                    ->disableToolbarButtons([
+                        'attachFiles', 'blockquote', 'codeBlock',
+                        'h2', 'h3', 'link', 'redo', 'strike', 'undo',
+                    ])
+                    ->extraInputAttributes(['style' => 'text-transform: uppercase'])
+                    ->afterStateHydrated(fn ($state) => Str::upper($state))
+                    ->afterStateUpdated(fn ($state) => Str::upper($state))
+                    ->placeholder('Add your follow-up details here...')
+                    ->required(),
+            ])
+            ->modalSubmitAction(function ($action) {
+                return $action->extraAttributes([
+                    'x-show' => '$wire.mountedFormComponentActionsData?.[0]?.manual_follow_up_count != 4',
+                ]);
+            })
+            ->extraModalFooterActions(fn () => [
+                \Filament\Actions\Action::make('submit_and_inactive')
+                    ->label('Submit & Change to InActive')
+                    ->color('danger')
+                    ->icon('heroicon-o-x-circle')
+                    ->extraAttributes([
+                        'x-show' => '$wire.mountedFormComponentActionsData?.[0]?.manual_follow_up_count == 4',
+                        'style' => 'display: none;',
+                    ])
+                    ->alpineClickHandler("
+                        let data = \$wire.mountedFormComponentActionsData?.[0];
+                        let notesText = (data?.notes || '').replace(/<[^>]*>/g, '').trim();
+                        let valid = data?.follow_up_date && notesText && data?.project_priority;
+                        if (data?.send_email) {
+                            let contentText = (data?.email_content || '').replace(/<[^>]*>/g, '').trim();
+                            valid = valid && data?.scheduler_type && (data?.required_attendees || '').trim() && data?.email_template && (data?.email_subject || '').trim() && contentText;
+                        }
+                        if (!valid) {
+                            \$wire.callMountedFormComponentAction();
+                            return;
+                        }
+
+                        let parentModal = \$el.closest('.fi-modal');
+                        if (parentModal) parentModal.style.display = 'none';
+
+                        let overlay = document.createElement('div');
+                        overlay.id = 'confirm-inactive-overlay';
+                        overlay.style.cssText = 'position:fixed;inset:0;z-index:999;display:flex;align-items:flex-start;justify-content:center;padding-top:20vh;';
+                        overlay.innerHTML = `
+                            <div style=\"position:fixed;inset:0;background:rgba(0,0,0,0.5)\"></div>
+                            <div style=\"position:relative;max-width:28rem;width:100%;margin:1rem;border-radius:0.75rem;background:white;box-shadow:0 25px 50px -12px rgba(0,0,0,0.25);overflow:hidden\" class=\"dark:bg-gray-900\">
+                                <div style=\"padding:1.5rem;text-align:center\">
+                                    <h2 style=\"font-size:1rem;font-weight:600;color:#111827\" class=\"dark:text-white\">Confirm Status Change</h2>
+                                    <p style=\"margin-top:1rem;font-size:0.875rem;color:#6b7280\" class=\"dark:text-gray-400\">Are you sure you want to submit this follow-up and change the project status to <strong>InActive</strong>?</p>
+                                </div>
+                                <div style=\"display:flex;flex-direction:row;gap:0.75rem;border-top:1px solid #e5e7eb;padding:1rem 1.5rem\" class=\"dark:border-white/10\">
+                                    <button type=\"button\" id=\"confirm-inactive-cancel\" style=\"flex:1;font-size:0.875rem;font-weight:600;padding:0.5rem 1rem;border-radius:0.5rem;border:1px solid #d1d5db;background:white;color:#111827;cursor:pointer\" class=\"dark:bg-white/5 dark:text-white dark:border-white/20\">Cancel</button>
+                                    <button type=\"button\" id=\"confirm-inactive-yes\" style=\"flex:1;font-size:0.875rem;font-weight:600;padding:0.5rem 1rem;border-radius:0.5rem;border:none;background:#dc2626;color:white;cursor:pointer\">Yes, Change to InActive</button>
+                                </div>
+                            </div>
+                        `;
+                        document.body.appendChild(overlay);
+
+                        overlay.querySelector('#confirm-inactive-cancel').onclick = () => {
+                            overlay.remove();
+                            if (parentModal) parentModal.style.display = '';
+                        };
+
+                        overlay.querySelector('#confirm-inactive-yes').onclick = () => {
+                            overlay.remove();
+                            \$wire.callMountedFormComponentAction();
+                        };
+                    "),
+            ])
+            ->action(function (Lead $record, array $data) {
+                $softwareHandover = SoftwareHandover::where('lead_id', $record->id)->latest()->first();
+
+                if (!$softwareHandover) {
+                    Notification::make()
+                        ->title('Error: Software Handover record not found')
+                        ->danger()
+                        ->send();
+                    return;
+                }
+
+                // Process follow-up using shared method
+                self::processFollowUpWithEmail($softwareHandover, $data);
+
+                // If follow-up count is 4, change status to InActive
+                if (($data['manual_follow_up_count'] ?? 0) == 4) {
+                    $softwareHandover->update([
+                        'status_handover' => 'Inactive',
+                    ]);
+
+                    ImplementerLogs::create([
+                        'subject_id' => $softwareHandover->id,
+                        'log_type' => 'status_change',
+                        'description' => 'Project marked as InActive',
+                        'remark' => 'Project marked as InActive (Follow-up count reached 4)',
+                        'causer_id' => auth()->id(),
+                        'lead_id' => $record->id,
+                    ]);
+
+                    Notification::make()
+                        ->title('Follow-up added & project status changed to InActive')
+                        ->warning()
+                        ->send();
+
+                    return;
+                }
+            });
+    }
+
+    /**
+     * Process the follow-up action with email functionality
+     *
+     * @param SoftwareHandover $record
+     * @param array $data
+     * @param bool $createFollowUp Whether to create a follow-up entry (default: true)
+     * @return ImplementerLogs|null
+     */
+    public static function processFollowUpWithEmail(SoftwareHandover $record, array $data, bool $createFollowUp = true): ?ImplementerLogs
+    {
+        if (!$record) {
+            Notification::make()
+                ->title('Error: Software Handover record not found')
+                ->danger()
+                ->send();
+            return null;
+        }
+
+        try {
+            $implementerLog = null;
+
+            // ✅ DEBUG: Log incoming attachment data
+            Log::info('processFollowUpWithEmail - Input data analysis', [
+                'has_project_plan_attachments' => !empty($data['project_plan_attachments']),
+                'project_plan_attachments_count' => count($data['project_plan_attachments'] ?? []),
+                'project_plan_attachments' => $data['project_plan_attachments'] ?? null,
+                'data_keys' => array_keys($data),
+                'createFollowUp' => $createFollowUp,
+                'lead_id' => $record->lead_id
+            ]);
+
+            // ✅ Only create follow-up entry if explicitly requested
+            if ($createFollowUp) {
+                // Update the SoftwareHandover record with follow-up information
+                $record->update([
+                    'follow_up_date' => $data['follow_up_date'],
+                    'follow_up_counter' => true,
+                    'manual_follow_up_count' => $data['manual_follow_up_count'] ?? 0,
+                    'project_priority' => $data['project_priority'] ?? 'MEDIUM',
+                ]);
+
+                // Create description for the follow-up
+                $followUpDescription = 'Implementer Follow Up By ' . auth()->user()->name;
+
+                // Create a new implementer_logs entry with reference to SoftwareHandover
+                $implementerLog = ImplementerLogs::create([
+                    'lead_id' => $record->lead_id,
+                    'description' => $followUpDescription,
+                    'causer_id' => auth()->id(),
+                    'remark' => $data['notes'],
+                    'subject_id' => $record->id,
+                    'follow_up_date' => $data['follow_up_date'],
+                    'attachments' => !empty($data['project_plan_attachments']) ? array_values($data['project_plan_attachments']) : null,
+                ]);
+            }
+
+            if (isset($data['send_email']) && $data['send_email']) {
+                try {
+                    // Get recipient emails
+                    $recipientStr = $data['required_attendees'] ?? '';
+
+                    if (!empty($recipientStr)) {
+                        // Get email template content
+                        $subject = $data['email_subject'];
+                        $content = $data['email_content'];
+
+                        // Add signature to email content if provided
+                        if (isset($data['implementer_name']) && !empty($data['implementer_name'])) {
+                            $signature = "<br><br>Regards,<br>";
+                            $signature .= "{$data['implementer_name']}<br>";
+                            $signature .= "{$data['implementer_designation']}<br>";
+                            $signature .= "{$data['implementer_company']}<br>";
+                            $signature .= "Phone: {$data['implementer_phone']}<br>";
+
+                            if (!empty($data['implementer_email'])) {
+                                $signature .= "Email: {$data['implementer_email']}<br>";
+                            }
+
+                            $content .= $signature;
+                        }
+
+                        // Replace placeholders with actual data
+                        $lead = Lead::find($record->lead_id);
+                        $customerEmail = '';
+                        $customerPassword = '';
+                        if ($lead) {
+                            $customer = \App\Models\Customer::where('lead_id', $lead->id)->first();
+                            if ($customer) {
+                                $customerEmail = $customer->email ?? '';
+                                $customerPassword = $customer->plain_password ?? '';
+                            }
+                        }
+
+                        // Get software handover for additional placeholders
+                        $softwareHandover = SoftwareHandover::where('lead_id', $record->lead_id)
+                            ->latest()
+                            ->first();
+
+                        $placeholders = [
+                            '{customer_name}' => $lead->contact_name ?? '',
+                            '{company_name}' => $softwareHandover->company_name ?? ($lead->companyDetail?->company_name ?? 'Unknown Company'),
+                            '{implementer_name}' => $data['implementer_name'] ?? auth()->user()->name ?? '',
+                            '{implementer_designation}' => $data['implementer_designation'] ?? 'Implementer',
+                            '{lead_owner}' => $lead->lead_owner ?? '',
+                            '{follow_up_date}' => $data['follow_up_date'] ?? date('d M Y'),
+                            '{recording_links}' => self::formatRecordingLinksForEmail($data['session_recording_links'] ?? $data['session_recording_link'] ?? ''),
+                            '{session_recording_link}' => self::formatRecordingLinksForEmail($data['session_recording_link'] ?? ''),
+                            '{recording_link}' => self::formatRecordingLinksForEmail($data['session_recording_link'] ?? ''), // Additional placeholder
+                            '{customer_email}' => $customerEmail,
+                            '{customer_password}' => $customerPassword,
+                            '{customer_portal_url}' => '<a href="' . str_replace('http://', 'https://', config('app.url')) . '/customer/login" target="_blank" style="color: #3b82f6; text-decoration: underline;">' . str_replace('http://', 'https://', config('app.url')) . '/customer/login</a>',
+                            '{project_plan_link}' => !empty($softwareHandover->project_plan_link) && $softwareHandover->project_plan_link !== 'Not Generated Yet'
+                                ? '<a href="' . $softwareHandover->project_plan_link . '" target="_blank" style="color: #3b82f6; text-decoration: underline;">' . $softwareHandover->project_plan_link . '</a>'
+                                : 'Not Generated Yet',
+                            // Add these additional placeholders to catch any variations
+                            'Not available' => self::formatRecordingLinksForEmail($data['session_recording_link'] ?? ''),
+                            '{session_recordings}' => self::formatRecordingLinksForEmail($data['session_recording_link'] ?? ''),
+                        ];
+
+                        // Apply placeholders with multiple passes to ensure all variations are caught
+                        $content = str_replace(array_keys($placeholders), array_values($placeholders), $content);
+
+                        // Additional replacement for any remaining "Not available" text
+                        if (!empty($data['session_recording_link'])) {
+                            $formattedLinks = self::formatRecordingLinksForEmail($data['session_recording_link']);
+                            $content = str_replace('Not available', $formattedLinks, $content);
+                            $content = str_replace('Recording Link Not Ready Yet', $formattedLinks, $content);
+                            $content = str_replace('Recording will be available after', $formattedLinks, $content);
+                        }
+                        $subject = str_replace(array_keys($placeholders), array_values($placeholders), $subject);
+
+                        // Collect valid email addresses
+                        $validRecipients = [];
+                        foreach (explode(';', $recipientStr) as $recipient) {
+                            $recipient = trim($recipient);
+                            if (filter_var($recipient, FILTER_VALIDATE_EMAIL)) {
+                                $validRecipients[] = $recipient;
+                            }
+                        }
+
+                        if (!empty($validRecipients)) {
+                            // Get authenticated user's email for sender and BCC
+                            $authUser = auth()->user();
+                            $senderEmail = $data['implementer_email'] ?? $authUser->email;
+                            $senderName = $data['implementer_name'] ?? $authUser->name;
+
+                            $schedulerType = $data['scheduler_type'] ?? 'instant';
+
+                            $template = EmailTemplate::find($data['email_template']);
+                            $templateName = $template ? $template->name : 'Custom Email';
+
+                            // ✅ ENHANCED: More detailed logging before preparing email data
+                            Log::info('Preparing email data with attachments', [
+                                'has_project_plan_attachments' => !empty($data['project_plan_attachments']),
+                                'attachment_count' => count($data['project_plan_attachments'] ?? []),
+                                'attachment_paths' => $data['project_plan_attachments'] ?? [],
+                                'attachment_files_exist' => !empty($data['project_plan_attachments']) ?
+                                    array_map(function($path) {
+                                        $abs = \Illuminate\Support\Facades\Storage::disk('public')->path($path);
+                                        return ['path' => $path, 'exists' => file_exists($abs), 'size' => file_exists($abs) ? filesize($abs) : 0];
+                                    }, $data['project_plan_attachments']) : [],
+                                'lead_id' => $record->lead_id,
+                                'scheduler_type' => $schedulerType
+                            ]);
+
+                            // Store email data for scheduling
+                            $emailData = [
+                                'content' => $content,
+                                'subject' => $subject,
+                                'recipients' => $validRecipients,
+                                'sender_email' => $senderEmail,
+                                'sender_name' => $senderName,
+                                'lead_id' => $record->lead_id,
+                                'implementer_log_id' => $implementerLog ? $implementerLog->id : null,
+                                'template_name' => $templateName,
+                                'scheduler_type' => $schedulerType,
+                                'project_plan_attachments' => $data['project_plan_attachments'] ?? [], // ✅ Ensure this is passed
+                                'session_recording_link' => $data['session_recording_link'] ?? null,
+                            ];
+
+                            // ✅ ENHANCED: Log the final email data before sending
+                            Log::info('Final email data prepared', [
+                                'email_data_keys' => array_keys($emailData),
+                                'has_attachments_in_email_data' => !empty($emailData['project_plan_attachments']),
+                                'email_data_attachments' => $emailData['project_plan_attachments'] ?? null,
+                                'about_to_send' => $schedulerType === 'instant' || $schedulerType === 'both'
+                            ]);
+
+                            // Handle different scheduler types
+                            if ($schedulerType === 'instant' || $schedulerType === 'both') {
+                                // ✅ Log just before calling sendEmail
+                                Log::info('About to call sendEmail with attachments', [
+                                    'attachments_in_data' => !empty($emailData['project_plan_attachments']),
+                                    'attachment_count' => count($emailData['project_plan_attachments'] ?? []),
+                                    'method' => 'instant_send'
+                                ]);
+
+                                // Send email immediately
+                                self::sendEmail($emailData);
+
+                                // Record instant send in scheduled_emails so history/attachments stay visible
+                                DB::table('scheduled_emails')->insert([
+                                    'email_data' => json_encode($emailData),
+                                    'scheduled_date' => null,
+                                    'status' => 'Done',
+                                    'created_at' => now(),
+                                    'updated_at' => now(),
+                                ]);
+
+                                Notification::make()
+                                    ->title('Email sent immediately to ' . count($validRecipients) . ' recipient(s)')
+                                    ->success()
+                                    ->send();
+                            }
+
+                            if ($schedulerType === 'scheduled' || $schedulerType === 'both') {
+                                // Schedule email for follow-up date at 8am
+                                $scheduledDate = date('Y-m-d 08:00:00', strtotime($data['follow_up_date']));
+
+                                // ✅ Log scheduled email data
+                                Log::info('Storing scheduled email with attachments', [
+                                    'attachments_in_scheduled_data' => !empty($emailData['project_plan_attachments']),
+                                    'attachment_count' => count($emailData['project_plan_attachments'] ?? []),
+                                    'scheduled_for' => $scheduledDate
+                                ]);
+
+                                // Store scheduled email in database
+                                DB::table('scheduled_emails')->insert([
+                                    'email_data' => json_encode($emailData),
+                                    'scheduled_date' => $scheduledDate,
+                                    'status' => 'New',
+                                    'created_at' => now(),
+                                    'updated_at' => now(),
+                                ]);
+
+                                Notification::make()
+                                    ->title('Email scheduled for ' . date('d M Y \a\t 8:00 AM', strtotime($scheduledDate)))
+                                    ->success()
+                                    ->send();
+                            }
+                        }
+                    }
+                } catch (\Exception $e) {
+                    Log::error('Error sending follow-up email: ' . $e->getMessage(), [
+                        'trace' => $e->getTraceAsString(),
+                        'had_attachments' => !empty($data['project_plan_attachments']),
+                        'attachment_count' => count($data['project_plan_attachments'] ?? [])
+                    ]);
+                    Notification::make()
+                        ->title('Error sending email')
+                        ->body($e->getMessage())
+                        ->danger()
+                        ->send();
+                }
+            }
+
+            // ✅ Only show this notification if we created a follow-up
+            if ($createFollowUp) {
+                Notification::make()
+                    ->title('Follow-up added successfully')
+                    ->success()
+                    ->send();
+            }
+
+            return $implementerLog;
+        } catch (\Exception $e) {
+            Log::error('Error processing follow-up: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+                'input_data_keys' => array_keys($data),
+                'had_attachments' => !empty($data['project_plan_attachments'])
+            ]);
+            Notification::make()
+                ->title('Error adding follow-up')
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
+
+            return null;
+        }
+    }
+
+    /**
+     * Send email using the provided data
+     *
+     * @param array $emailData
+     * @return void
+     */
+    public static function sendEmail(array $emailData): void
+    {
+        try {
+            // ✅ ENHANCED: Log the received email data at the start
+            Log::info('sendEmail method called', [
+                'email_data_keys' => array_keys($emailData),
+                'has_project_plan_attachments' => !empty($emailData['project_plan_attachments']),
+                'project_plan_attachments_count' => count($emailData['project_plan_attachments'] ?? []),
+                'project_plan_attachments_data' => $emailData['project_plan_attachments'] ?? null,
+                'recipients_count' => count($emailData['recipients'] ?? []),
+                'subject' => $emailData['subject'] ?? 'No subject'
+            ]);
+
+            // ✅ Handle case where implementer_log_id might be null
+            $implementerLog = null;
+            if (!empty($emailData['implementer_log_id'])) {
+                $implementerLog = ImplementerLogs::find($emailData['implementer_log_id']);
+            }
+
+            // ✅ Try to find software handover using different methods
+            $softwareHandover = null;
+
+            // Method 1: If we have implementer log, use its subject_id
+            if ($implementerLog) {
+                $softwareHandover = SoftwareHandover::find($implementerLog->subject_id);
+            }
+
+            // Method 2: If no implementer log or no software handover found, try using lead_id directly
+            if (!$softwareHandover && !empty($emailData['lead_id'])) {
+                $softwareHandover = SoftwareHandover::where('lead_id', $emailData['lead_id'])
+                    ->latest()
+                    ->first();
+            }
+
+            // ✅ If still no software handover found, log warning but continue with email
+            if (!$softwareHandover) {
+                Log::warning("Software handover not found, sending email without CC", [
+                    'implementer_log_id' => $emailData['implementer_log_id'] ?? null,
+                    'lead_id' => $emailData['lead_id'] ?? null,
+                ]);
+            }
+
+            // Initialize CC recipients array
+            $ccRecipients = [];
+
+            // ✅ Only add implementer and salesperson to CC if we found a software handover
+            if ($softwareHandover) {
+                // Add implementer to CC if available and different from sender
+                if ($softwareHandover->implementer) {
+                    $implementer = User::where('name', $softwareHandover->implementer)->first();
+                    if ($implementer && $implementer->email && $implementer->email !== $emailData['sender_email']) {
+                        $ccRecipients[] = $implementer->email;
+                        Log::info("Added implementer to CC: {$implementer->name} <{$implementer->email}>");
+                    }
+                }
+
+                // Add salesperson to CC if available and different from sender and implementer
+                // if ($softwareHandover->salesperson) {
+                //     $salesperson = User::where('name', $softwareHandover->salesperson)->first();
+                //     if ($salesperson && $salesperson->email &&
+                //         $salesperson->email !== $emailData['sender_email'] &&
+                //         !in_array($salesperson->email, $ccRecipients)) {
+                //         $ccRecipients[] = $salesperson->email;
+                //         Log::info("Added salesperson to CC: {$salesperson->name} <{$salesperson->email}>");
+                //     }
+                // }
+            }
+
+            // ✅ FIXED: Enhanced attachment processing with detailed logging
+            $attachmentCount = 0;
+            $attachmentSummary = [];
+
+            // ✅ DETAILED: Log attachment processing start
+            Log::info('Starting attachment processing', [
+                'has_project_plan_attachments' => !empty($emailData['project_plan_attachments']),
+                'attachment_data' => $emailData['project_plan_attachments'] ?? 'null',
+                'attachment_type' => gettype($emailData['project_plan_attachments'] ?? null),
+                'is_array' => is_array($emailData['project_plan_attachments'] ?? null)
+            ]);
+
+            // Send the email with CC recipients and attachments
+            Mail::html($emailData['content'], function (Message $message) use ($emailData, $ccRecipients, &$attachmentCount, &$attachmentSummary) {
+                $message->to($emailData['recipients'])
+                    ->subject($emailData['subject'])
+                    ->from($emailData['sender_email'], $emailData['sender_name']);
+
+                // Add CC recipients if we have any
+                if (!empty($ccRecipients)) {
+                    $message->cc($ccRecipients);
+                }
+
+                // BCC the sender as well
+                $message->bcc($emailData['sender_email']);
+
+                // ✅ Attach project plan files if they exist with enhanced logging
+                if (!empty($emailData['project_plan_attachments'])) {
+                    Log::info('Processing project plan attachments inside Mail closure', [
+                        'count' => count($emailData['project_plan_attachments']),
+                        'files' => $emailData['project_plan_attachments']
+                    ]);
+
+                    foreach ($emailData['project_plan_attachments'] as $index => $filePath) {
+                        $absolutePath = \Illuminate\Support\Facades\Storage::disk('public')->path($filePath);
+
+                        Log::info("Processing attachment {$index}", [
+                            'filePath' => $filePath,
+                            'absolutePath' => $absolutePath,
+                            'file_exists' => file_exists($absolutePath),
+                            'file_size' => file_exists($absolutePath) ? filesize($absolutePath) : 'N/A',
+                            'is_readable' => file_exists($absolutePath) ? is_readable($absolutePath) : 'N/A'
+                        ]);
+
+                        if (file_exists($absolutePath)) {
+                            try {
+                                $mimeType = mime_content_type($absolutePath);
+                                $fileName = basename($absolutePath);
+                                $fileSize = filesize($absolutePath);
+
+                                $message->attach($absolutePath, [
+                                    'as' => $fileName,
+                                    'mime' => $mimeType
+                                ]);
+
+                                $attachmentCount++;
+                                $attachmentSummary[] = [
+                                    'name' => $fileName,
+                                    'size' => $fileSize,
+                                    'mime' => $mimeType,
+                                    'status' => 'attached'
+                                ];
+
+                                Log::info('Successfully attached file to email', [
+                                    'file' => $fileName,
+                                    'path' => $absolutePath,
+                                    'mime' => $mimeType,
+                                    'size' => $fileSize . ' bytes',
+                                    'attachment_number' => $attachmentCount
+                                ]);
+                            } catch (\Exception $e) {
+                                Log::error('Failed to attach file to email', [
+                                    'file' => basename($absolutePath),
+                                    'path' => $absolutePath,
+                                    'error' => $e->getMessage(),
+                                    'trace' => $e->getTraceAsString()
+                                ]);
+
+                                $attachmentSummary[] = [
+                                    'name' => basename($absolutePath),
+                                    'path' => $absolutePath,
+                                    'status' => 'failed',
+                                    'error' => $e->getMessage()
+                                ];
+                            }
+                        } else {
+                            Log::warning('Attachment file not found', [
+                                'path' => $filePath,
+                                'full_path' => $absolutePath,
+                                'directory_exists' => file_exists(dirname($absolutePath))
+                            ]);
+
+                            $attachmentSummary[] = [
+                                'name' => basename($filePath),
+                                'path' => $filePath,
+                                'status' => 'file_not_found'
+                            ];
+                        }
+                    }
+                } else {
+                    Log::info('No project_plan_attachments found in email data or array is empty');
+                }
+            });
+
+            // ✅ ENHANCED: Log email sent successfully with detailed attachment info
+            Log::info('Follow-up email sent successfully', [
+                'to' => $emailData['recipients'],
+                'cc' => $ccRecipients,
+                'subject' => $emailData['subject'],
+                'implementer_log_id' => $emailData['implementer_log_id'] ?? null,
+                'lead_id' => $emailData['lead_id'] ?? null,
+                'template' => $emailData['template_name'] ?? 'Unknown',
+                'attachments_sent' => $attachmentCount,
+                'attachments_available' => count($emailData['project_plan_attachments'] ?? []),
+                'attachment_summary' => $attachmentSummary,
+                'successful_attachments' => array_filter($attachmentSummary, fn($att) => $att['status'] === 'attached'),
+                'failed_attachments' => array_filter($attachmentSummary, fn($att) => $att['status'] !== 'attached')
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error in sendEmail method: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+                'data_keys' => array_keys($emailData),
+                'had_project_plan_attachments' => !empty($emailData['project_plan_attachments']),
+                'attachment_count' => count($emailData['project_plan_attachments'] ?? [])
+            ]);
+            throw $e;
+        }
+    }
+
+    public static function stopImplementerFollowUp(): Action
+    {
+        return Action::make('stop_follow_up')
+            ->label('Stop Follow Up')
+            ->color('danger')
+            ->icon('heroicon-o-x-circle')
+            ->requiresConfirmation()
+            ->modalHeading('Stop Follow Up Process')
+            ->modalDescription('This will create a final follow-up entry and mark the follow-up process as completed. Are you sure you want to continue?')
+            ->modalWidth('lg');
+    }
+
+    /**
+     * Process the stop follow-up action
+     *
+     * @param SoftwareHandover $record
+     * @return ImplementerLogs|null
+     */
+    public static function processStopFollowUp(SoftwareHandover $record): ?ImplementerLogs
+    {
+        if (!$record) {
+            Notification::make()
+                ->title('Error: Software Handover record not found')
+                ->danger()
+                ->send();
+            return null;
+        }
+
+        try {
+            // Create description for the final follow-up
+            $followUpDescription = 'Implementer Stop Follow Up By ' . auth()->user()->name;
+
+            // Create a new implementer_logs entry with reference to SoftwareHandover
+            $implementerLog = ImplementerLogs::create([
+                'lead_id' => $record->lead_id,
+                'description' => $followUpDescription,
+                'causer_id' => auth()->id(),
+                'remark' => 'Implementer Stop the Follow Up Features',
+                'subject_id' => $record->id,
+                'follow_up_date' => now()->format('Y-m-d'), // Today
+            ]);
+
+            // Cancel all scheduled emails related to this software handover
+            $cancelledEmailsCount = self::cancelScheduledEmails($record);
+
+            // Update the SoftwareHandover record to indicate follow-up is done
+            $record->update([
+                'follow_up_date' => now()->format('Y-m-d'), // Today
+                // 'follow_up_counter' => false, // Stop future follow-ups (changed from true to false)
+            ]);
+
+            $message = 'Follow-up process stopped successfully';
+            if ($cancelledEmailsCount > 0) {
+                $message .= " and {$cancelledEmailsCount} scheduled email(s) were cancelled";
+            }
+
+            Notification::make()
+                ->title($message)
+                ->success()
+                ->send();
+
+            return $implementerLog;
+        } catch (\Exception $e) {
+            Log::error('Error stopping follow-up: ' . $e->getMessage());
+            Notification::make()
+                ->title('Error stopping follow-up')
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
+
+            return null;
+        }
+    }
+
+    /**
+     * Cancel all scheduled emails related to a software handover
+     *
+     * @param SoftwareHandover $record
+     * @return int Number of cancelled emails
+     */
+    private static function cancelScheduledEmails(SoftwareHandover $record): int
+    {
+        try {
+            // Find all implementer logs related to this software handover
+            $implementerLogIds = ImplementerLogs::where('subject_id', $record->id)
+                ->pluck('id')
+                ->toArray();
+
+            if (empty($implementerLogIds)) {
+                return 0;
+            }
+
+            // Cancel scheduled emails that contain any of these implementer log IDs
+            $cancelledCount = 0;
+            $scheduledEmails = DB::table('scheduled_emails')
+                ->where('status', 'New')
+                ->whereNotNull('scheduled_date')
+                ->whereDate('scheduled_date', '>=', now())
+                ->get();
+
+            foreach ($scheduledEmails as $scheduledEmail) {
+                try {
+                    $emailData = json_decode($scheduledEmail->email_data, true);
+
+                    // Check if this scheduled email is related to our software handover
+                    if (isset($emailData['implementer_log_id']) &&
+                        in_array($emailData['implementer_log_id'], $implementerLogIds)) {
+
+                        // Cancel the scheduled email
+                        DB::table('scheduled_emails')
+                            ->where('id', $scheduledEmail->id)
+                            ->update([
+                                'status' => 'Stop',
+                                'updated_at' => now(),
+                            ]);
+
+                        $cancelledCount++;
+
+                        Log::info("Cancelled scheduled email for implementer log ID: {$emailData['implementer_log_id']}");
+                    }
+                } catch (\Exception $e) {
+                    Log::error("Error processing scheduled email ID {$scheduledEmail->id}: " . $e->getMessage());
+                }
+            }
+
+            return $cancelledCount;
+        } catch (\Exception $e) {
+            Log::error('Error cancelling scheduled emails: ' . $e->getMessage());
+            return 0;
+        }
+    }
+
+    public static function sendSessionSummaryConfirmAction(): Action
+    {
+        return Action::make('send_session_summary_confirm')
+            ->label('Send Session Summary')
+            ->color('success')
+            ->icon('heroicon-o-envelope')
+            ->visible(function (ImplementerAppointment $record) {
+                return $record->sent_summary_email != 1 && $record->session_recording_link != null;
+            })
+            ->modalHeading('Update Project Plan?')
+            ->modalDescription('Have you updated the Project Plan? If not, please update it first before sending the session summary.')
+            ->modalSubmitAction(false)
+            ->modalCancelAction(false)
+            ->extraModalFooterActions([
+                self::sendSessionSummaryAction()
+                    ->label('Yes, continue')
+                    ->color('success')
+                    ->cancelParentActions(),
+
+                Action::make('redirect_to_project_plan')
+                    ->label('No, update Project Plan first')
+                    ->color('warning')
+                    ->icon('heroicon-o-document-text')
+                    ->url(function (ImplementerAppointment $record) {
+                        $leadId = $record->lead?->id;
+                        if (!$leadId) return null;
+                        return route('filament.admin.resources.leads.view', [
+                            'record' => Encryptor::encrypt($leadId),
+                        ]) . '?tab=-project-plan-tab';
+                    })
+                    ->openUrlInNewTab()
+                    ->cancelParentActions(),
+            ]);
+    }
+
+    public static function sendSessionSummaryAction(): Action
+    {
+        return Action::make('send_session_summary')
+            ->label('Send Session Summary')
+            ->color('success')
+            ->icon('heroicon-o-envelope')
+            ->modalWidth('6xl')
+            ->modalHeading(function (ImplementerAppointment $record) {
+                $companyName = 'Unknown Company';
+
+                if ($record->lead && $record->lead->companyDetail) {
+                    $companyName = $record->lead->companyDetail->company_name;
+                } elseif ($record->softwareHandover) {
+                    $companyName = $record->softwareHandover->company_name ?? 'N/A';
+                }
+
+                return "Send Session Summary for {$companyName}";
+            })
+            ->visible(function (ImplementerAppointment $record) {
+                return $record->sent_summary_email != 1 && $record->session_recording_link != null;
+            })
+            ->form([
+                Hidden::make('send_email')
+                    ->default(true),
+
+                Hidden::make('scheduler_type')
+                    ->default('instant'),
+
+                // ✅ Enhanced file attachment section - EXACTLY same as RelationManager
+                Grid::make(2)
+                    ->schema([
+                        Select::make('project_plan_files')
+                            ->label('Project Plan Files (from Storage)')
+                            ->options(function (ImplementerAppointment $record) {
+                                // Get lead from the record
+                                $lead = $record->lead;
+                                if (!$lead) {
+                                    return [];
+                                }
+
+                                $companyName = $lead->companyDetail?->company_name ?? 'Unknown';
+                                $companySlug = \Illuminate\Support\Str::slug($companyName);
+
+                                $files = \Illuminate\Support\Facades\Storage::disk('public')
+                                    ->files('project-plans');
+
+                                $matchingFiles = [];
+                                foreach ($files as $file) {
+                                    if (str_contains($file, $companySlug)) {
+                                        $fullPath = storage_path('app/public/' . $file);
+                                        $matchingFiles[] = [
+                                            'path' => $file,
+                                            'name' => basename($file),
+                                            'modified' => file_exists($fullPath) ? filemtime($fullPath) : 0
+                                        ];
+                                    }
+                                }
+
+                                usort($matchingFiles, function($a, $b) {
+                                    return $b['modified'] - $a['modified'];
+                                });
+
+                                $options = [];
+                                foreach ($matchingFiles as $file) {
+                                    $label = $file['name'];
+                                    if (isset($matchingFiles[0]) && $file['path'] === $matchingFiles[0]['path']) {
+                                        $label .= ' (Latest)';
+                                    }
+                                    $options[$file['path']] = $label;
+                                }
+
+                                return $options;
+                            })
+                            ->default(function (ImplementerAppointment $record) {
+                                // Get lead from the record
+                                $lead = $record->lead;
+                                if (!$lead) {
+                                    return null;
+                                }
+
+                                $companyName = $lead->companyDetail?->company_name ?? 'Unknown';
+                                $companySlug = \Illuminate\Support\Str::slug($companyName);
+
+                                $files = \Illuminate\Support\Facades\Storage::disk('public')
+                                    ->files('project-plans');
+
+                                $matchingFiles = [];
+                                foreach ($files as $file) {
+                                    if (str_contains($file, $companySlug)) {
+                                        $fullPath = storage_path('app/public/' . $file);
+                                        $matchingFiles[] = [
+                                            'path' => $file,
+                                            'modified' => file_exists($fullPath) ? filemtime($fullPath) : 0
+                                        ];
+                                    }
+                                }
+
+                                usort($matchingFiles, function($a, $b) {
+                                    return $b['modified'] - $a['modified'];
+                                });
+
+                                return !empty($matchingFiles) ? [$matchingFiles[0]['path']] : null;
+                            })
+                            ->multiple()
+                            ->searchable()
+                            ->preload()
+                            ->helperText('Select existing project plan files from storage')
+                            ->columnSpan(1),
+
+                        Placeholder::make('session_recordings')
+                            ->label('Session Recordings')
+                            ->content(function (ImplementerAppointment $record) {
+                                // ✅ FIXED: Better null and empty checking
+                                if (empty($record->session_recording_link) ||
+                                    $record->session_recording_link === null ||
+                                    trim($record->session_recording_link) === '') {
+                                    return new \Illuminate\Support\HtmlString(
+                                        '<div class="p-4 border border-yellow-200 rounded-lg bg-yellow-50">
+                                            <div class="flex items-center">
+                                                <svg class="w-5 h-5 mr-2 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"></path>
+                                                </svg>
+                                                <span class="font-medium text-yellow-800">Recording Not Available</span>
+                                            </div>
+                                            <p class="mt-2 text-sm text-yellow-700">
+                                                Recording will be available after the meeting ends and is processed by Microsoft Teams (usually within 1-4 hours).
+                                            </p>
+                                        </div>'
+                                    );
+                                }
+
+                                // ✅ Parse multiple recording links
+                                $recordingLinks = explode(';', $record->session_recording_link);
+                                $recordingLinks = array_filter(array_map('trim', $recordingLinks));
+
+                                if (empty($recordingLinks)) {
+                                    return new \Illuminate\Support\HtmlString('<p class="text-gray-500">No recordings available</p>');
+                                }
+
+                                $html = '<div class="space-y-3">';
+
+                                if (count($recordingLinks) === 1) {
+                                    // Single recording
+                                    $html .= '<div class="p-4 border border-green-200 rounded-lg bg-green-50">';
+                                    $html .= '<div class="flex items-center mb-2">';
+                                    $html .= '<svg class="w-5 h-5 mr-2 text-green-500" fill="currentColor" viewBox="0 0 20 20">';
+                                    $html .= '<path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z"></path>';
+                                    $html .= '</svg>';
+                                    $html .= '<span class="font-medium text-green-800">Recording Available</span>';
+                                    $html .= '</div>';
+
+                                    $html .= '<div class="space-y-2">';
+                                    $html .= '<a href="' . htmlspecialchars($recordingLinks[0]) . '" target="_blank" style="display:inline-flex;align-items:center;padding:0.5rem 0.75rem;font-size:0.875rem;font-weight:500;line-height:1rem;color:#ffffff;background-color:#2563eb;border:1px solid transparent;border-radius:0.375rem;text-decoration:none;" onmouseover="this.style.backgroundColor=\'#1d4ed8\'" onmouseout="this.style.backgroundColor=\'#2563eb\'">';
+                                    $html .= '<svg style="width:1rem;height:1rem;margin-right:0.5rem;" fill="none" stroke="currentColor" viewBox="0 0 24 24">';
+                                    $html .= '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h1m4 0h1m-6 4h8a2 2 0 002-2V8a2 2 0 00-2-2H8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>';
+                                    $html .= '</svg>';
+                                    $html .= 'View Recording';
+                                    $html .= '</a>';
+
+                                    // Show truncated URL for reference
+                                    $truncatedUrl = strlen($recordingLinks[0]) > 60 ? substr($recordingLinks[0], 0, 60) . '...' : $recordingLinks[0];
+                                    $html .= '<div class="text-xs text-gray-600 break-all">' . htmlspecialchars($truncatedUrl) . '</div>';
+                                    $html .= '</div>';
+                                    $html .= '</div>';
+                                } else {
+                                    // Multiple recordings
+                                    $html .= '<div class="p-4 border border-green-200 rounded-lg bg-green-50">';
+                                    $html .= '<div class="flex items-center mb-3">';
+                                    $html .= '<svg class="w-5 h-5 mr-2 text-green-500" fill="currentColor" viewBox="0 0 20 20">';
+                                    $html .= '<path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z"></path>';
+                                    $html .= '</svg>';
+                                    $html .= '<span class="font-medium text-green-800">' . count($recordingLinks) . ' Recordings Available</span>';
+                                    $html .= '</div>';
+
+                                    $html .= '<div class="space-y-2">';
+                                    foreach ($recordingLinks as $index => $link) {
+                                        $partNumber = $index + 1;
+                                        $html .= '<div class="flex items-center justify-between p-2 bg-white border border-green-200 rounded">';
+                                        $html .= '<span class="text-sm font-medium text-gray-700">Part ' . $partNumber . '</span>';
+                                        $html .= '<a href="' . htmlspecialchars($link) . '" target="_blank" class="inline-flex items-center px-2 py-1 text-xs font-medium leading-4 text-blue-600 bg-blue-100 border border-transparent rounded hover:bg-blue-200">';
+                                        $html .= '<svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">';
+                                        $html .= '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>';
+                                        $html .= '</svg>';
+                                        $html .= 'Open';
+                                        $html .= '</a>';
+                                        $html .= '</div>';
+                                    }
+                                    $html .= '</div>';
+                                    $html .= '</div>';
+                                }
+
+                                $html .= '</div>';
+
+                                return new \Illuminate\Support\HtmlString($html);
+                            })
+                            ->columnSpan(1),
+
+                        // ✅ Hidden field to store all recording links for email
+                        Hidden::make('session_recording_link')
+                            ->default(function (ImplementerAppointment $record) {
+                                return $record->session_recording_link ?: null;
+                            })
+                            ->dehydrated(true),
+                        // TextInput::make('session_recording_link')
+                        //     ->label('Session Recording Link')
+                        //     ->placeholder('Recording Link Not Ready Yet')
+                        //     ->default(function (ImplementerAppointment $record) {
+                        //         return $record->session_recording_link ?: null;
+                        //     })
+                        //     ->disabled()
+                        //     ->dehydrated(true)
+                        //     ->helperText(fn (callable $get) =>
+                        //         empty($get('session_recording_link'))
+                        //             ? '⏳ Recording will be available after the meeting ends and is processed by Microsoft Teams (usually within 1-4 hours).'
+                        //             : '✅ Recording is ready'
+                        //     )
+                        //     ->suffixIcon(fn (callable $get) =>
+                        //         empty($get('session_recording_link'))
+                        //             ? 'heroicon-o-clock'
+                        //             : 'heroicon-o-check-circle'
+                        //     )
+                        //     ->suffixIconColor(fn (callable $get) =>
+                        //         empty($get('session_recording_link'))
+                        //             ? 'warning'
+                        //             : 'success'
+                        //     )
+                        //     ->columnSpan(1),
+                    ]),
+
+                Fieldset::make('Email Details')
+                    ->schema([
+                        TextInput::make('required_attendees')
+                            ->label('Required Attendees')
+                            ->default(function (ImplementerAppointment $record) {
+                                // Get lead from the record
+                                $lead = $record->lead;
+                                $emails = [];
+
+                                if ($lead) {
+                                    $softwareHandover = SoftwareHandover::where('lead_id', $lead->id)->latest()->first();
+
+                                    if ($softwareHandover && !empty($softwareHandover->implementation_pics) && is_string($softwareHandover->implementation_pics)) {
+                                        try {
+                                            $contacts = json_decode($softwareHandover->implementation_pics, true);
+
+                                            if (is_array($contacts)) {
+                                                foreach ($contacts as $contact) {
+                                                    if (!empty($contact['pic_email_impl'])) {
+                                                        $emails[] = $contact['pic_email_impl'];
+                                                    }
+                                                }
+                                            }
+                                        } catch (\Exception $e) {
+                                            Log::error('Error parsing implementation_pics JSON: ' . $e->getMessage());
+                                        }
+                                    }
+
+                                    if ($lead->companyDetail && !empty($lead->companyDetail->additional_pic)) {
+                                        try {
+                                            $additionalPics = json_decode($lead->companyDetail->additional_pic, true);
+
+                                            if (is_array($additionalPics)) {
+                                                foreach ($additionalPics as $pic) {
+                                                    if (
+                                                        !empty($pic['email']) &&
+                                                        isset($pic['status']) &&
+                                                        $pic['status'] === 'Available'
+                                                    ) {
+                                                        $emails[] = $pic['email'];
+                                                    }
+                                                }
+                                            }
+                                        } catch (\Exception $e) {
+                                            Log::error('Error parsing additional_pic JSON: ' . $e->getMessage());
+                                        }
+                                    }
+                                }
+
+                                $uniqueEmails = array_unique($emails);
+                                return !empty($uniqueEmails) ? implode(';', $uniqueEmails) : null;
+                            })
+                            ->required()
+                            ->helperText('Separate each email with a semicolon (e.g., email1;email2;email3).'),
+
+                        Select::make('email_template')
+                            ->label('Email Template')
+                            ->options(function () {
+                                return \App\Models\EmailTemplate::whereIn('type', ['implementer'])
+                                    ->pluck('name', 'id')
+                                    ->toArray();
+                            })
+                            ->searchable()
+                            ->preload()
+                            ->reactive()
+                            ->afterStateUpdated(function ($state, callable $set) {
+                                if ($state) {
+                                    $template = \App\Models\EmailTemplate::find($state);
+                                    if ($template) {
+                                        $set('email_subject', $template->subject);
+                                        $set('email_content', $template->content);
+                                    }
+                                }
+                            })
+                            ->required(),
+
+                        // ✅ ADDED: Same layout as RelationManager with onboarding file upload
+                        Grid::make(2)
+                            ->schema([
+                                Grid::make(1)
+                                    ->schema([
+                                        TextInput::make('email_subject')
+                                            ->label('Email Subject')
+                                            ->required(),
+
+                                        FileUpload::make('onboarding_attachments')
+                                            ->label('Email Attachment')
+                                            ->multiple()
+                                            ->maxFiles(5)
+                                            ->acceptedFileTypes([
+                                                'application/pdf',
+                                                'application/vnd.ms-excel',
+                                                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                                            ])
+                                            ->directory('temp_onboarding_attachments')
+                                            ->preserveFilenames()
+                                            ->storeFileNamesIn('onboarding_attachment_names')
+                                            ->reactive()
+                                            ->afterStateUpdated(function (callable $get, callable $set, $state) {
+                                                // ✅ Log what's being uploaded
+                                                Log::info('Onboarding files uploaded in sendSessionSummaryAction', [
+                                                    'files' => $state,
+                                                    'type' => gettype($state),
+                                                    'count' => is_array($state) ? count($state) : 0
+                                                ]);
+                                            }),
+                                    ])->columnSpan(1),
+
+                                RichEditor::make('email_content')
+                                    ->label('Email Content')
+                                    ->disableToolbarButtons([
+                                        'attachFiles',
+                                    ])
+                                    ->required()
+                                    ->columnSpan(1),
+                            ]),
+                    ]),
+
+                Hidden::make('implementer_name')
+                    ->default(auth()->user()->name ?? ''),
+
+                Hidden::make('implementer_designation')
+                    ->default('Implementer'),
+
+                Hidden::make('implementer_company')
+                    ->default('TimeTec Cloud Sdn Bhd'),
+
+                Hidden::make('implementer_phone')
+                    ->default('03-80709933'),
+
+                Hidden::make('implementer_email')
+                    ->default(auth()->user()->email ?? ''),
+
+                RichEditor::make('notes')
+                    ->label('Remarks')
+                    ->disableToolbarButtons([
+                        'attachFiles',
+                        'blockquote',
+                        'codeBlock',
+                        'h2',
+                        'h3',
+                        'link',
+                        'redo',
+                        'strike',
+                        'undo',
+                    ])
+                    ->extraInputAttributes(['style' => 'text-transform: uppercase'])
+                    ->placeholder('Add your session summary details here...')
+                    ->required()
+            ])
+            ->action(function (array $data, ImplementerAppointment $record) {
+                try {
+                    // Get the software handover
+                    $softwareHandover = SoftwareHandover::where('lead_id', $record->lead_id)->latest()->first();
+
+                    if (!$softwareHandover) {
+                        Notification::make()
+                            ->title('Error: Software Handover record not found')
+                            ->danger()
+                            ->send();
+                        return;
+                    }
+
+                    $recordingLinksForEmail = '';
+                    if (!empty($data['session_recording_link'])) {
+                        $recordingLinks = explode(';', $data['session_recording_link']);
+                        $recordingLinks = array_filter(array_map('trim', $recordingLinks));
+
+                        if (count($recordingLinks) === 1) {
+                            $recordingLinksForEmail = "Session Recording: " . $recordingLinks[0];
+                        } else {
+                            $recordingLinksForEmail = "Session Recordings:\n";
+                            foreach ($recordingLinks as $index => $link) {
+                                $partNumber = $index + 1;
+                                $recordingLinksForEmail .= "Part {$partNumber}: {$link}\n";
+                            }
+                        }
+                    } else {
+                        $recordingLinksForEmail = "Session Recording: Not available";
+                    }
+
+                    // ✅ FIX: Replace {recording_links} placeholder in email content BEFORE calling processFollowUpWithEmail
+                    if (isset($data['email_content'])) {
+                        $data['email_content'] = str_replace('{recording_links}', $recordingLinksForEmail, $data['email_content']);
+                        $data['email_content'] = str_replace('{session_recording_link}', $recordingLinksForEmail, $data['email_content']);
+                    }
+
+                    // ✅ ADD: Pass the recording links as session_recording_links for the ImplementerActions method
+                    $data['session_recording_links'] = $data['session_recording_link'];
+
+                    // ✅ DEBUG: Log what we're about to send
+                    Log::info('ImplementerActions: About to send email with recording links processed', [
+                        'recording_links_in_email_content' => str_contains($data['email_content'] ?? '', 'Session Recording'),
+                        'email_content_sample' => substr($data['email_content'] ?? '', 0, 200) . '...',
+                        'has_session_recording_link' => !empty($data['session_recording_link']),
+                        'session_recording_link_value' => $data['session_recording_link'] ?? 'not_set'
+                    ]);
+
+                    // Collect attachments as paths RELATIVE to the public disk —
+                    // sendEmail resolves them via Storage::disk('public')->path().
+                    // Passing absolute paths here causes a double-prefix and the files silently fail to attach.
+                    $allAttachments = [];
+
+                    if (!empty($data['project_plan_files'])) {
+                        foreach ($data['project_plan_files'] as $relativePath) {
+                            $fullPath = storage_path('app/public/' . $relativePath);
+                            if (file_exists($fullPath)) {
+                                $allAttachments[] = $relativePath;
+                            } else {
+                                Log::warning('Project plan file not found in sendSessionSummaryAction', ['path' => $fullPath]);
+                            }
+                        }
+                    }
+
+                    if (!empty($data['onboarding_attachments'])) {
+                        foreach ($data['onboarding_attachments'] as $fileName) {
+                            $relativePath = str_contains($fileName, 'temp_onboarding_attachments/')
+                                ? $fileName
+                                : 'temp_onboarding_attachments/' . $fileName;
+
+                            $fullPath = storage_path('app/public/' . $relativePath);
+                            if (file_exists($fullPath)) {
+                                $allAttachments[] = $relativePath;
+                            } else {
+                                Log::warning('Onboarding file not found in sendSessionSummaryAction', [
+                                    'original_name' => $fileName,
+                                    'attempted_path' => $fullPath
+                                ]);
+                            }
+                        }
+                    }
+
+                    if (!empty($allAttachments)) {
+                        $data['project_plan_attachments'] = $allAttachments;
+                    }
+
+                    Log::info('Session summary attachments processed in sendSessionSummaryAction - FIXED', [
+                        'project_plan_files_input' => count($data['project_plan_files'] ?? []),
+                        'onboarding_attachments_input' => count($data['onboarding_attachments'] ?? []),
+                        'total_files_found' => count($allAttachments),
+                        'final_attachment_paths' => $allAttachments,
+                        'project_plan_attachments_key' => count($data['project_plan_attachments'] ?? [])
+                    ]);
+
+                    // Ensure email will be sent
+                    $data['send_email'] = true;
+
+                    // ✅ ADD: Pass lead_id explicitly for session summary to ensure CC works
+                    $data['lead_id'] = $record->lead_id;
+
+                    // Process the email through the existing follow-up system (without creating a follow-up entry)
+                    self::processFollowUpWithEmail($softwareHandover, $data, false);
+
+                    // Update the appointment record
+                    $record->update([
+                        'status' => 'Done',
+                        'sent_summary_email' => 1,
+                        'summary_email_sent_at' => now(),
+                        'summary_email_sent_by' => auth()->id(),
+                        'session_recording_link' => $data['session_recording_link'] ?? $record->session_recording_link,
+                    ]);
+
+                    // ✅ Clean up temporary onboarding files - EXACTLY same as RelationManager
+                    if (!empty($data['onboarding_attachments'])) {
+                        foreach ($data['onboarding_attachments'] as $fileName) {
+                            // ✅ FIXED: Handle cleanup for both path formats
+                            if (str_contains($fileName, 'temp_onboarding_attachments/')) {
+                                $filePath = storage_path('app/public/' . $fileName);
+                            } else {
+                                $filePath = storage_path('app/public/temp_onboarding_attachments/' . $fileName);
+                            }
+
+                            if (file_exists($filePath)) {
+                                try {
+                                    unlink($filePath);
+                                    Log::info("Cleaned up temporary file in sendSessionSummaryAction: {$fileName}");
+                                } catch (\Exception $e) {
+                                    Log::error('Failed to cleanup onboarding attachment in sendSessionSummaryAction: ' . $e->getMessage());
+                                }
+                            }
+                        }
+                    }
+
+                    Log::info('Session summary email sent and appointment updated in sendSessionSummaryAction', [
+                        'appointment_id' => $record->id,
+                        'lead_id' => $record->lead_id,
+                        'sent_by' => auth()->user()->name,
+                        'sent_at' => now(),
+                        'total_attachments_sent' => count($allAttachments),
+                        'attachment_breakdown' => [
+                            'project_plans' => count($data['project_plan_files'] ?? []),
+                            'onboarding_files' => count($data['onboarding_attachments'] ?? []),
+                            'combined_total' => count($allAttachments)
+                        ],
+                        'has_attachments' => !empty($allAttachments),
+                        'has_recording_link' => !empty($data['session_recording_link']),
+                        'recording_link' => $data['session_recording_link'] ?? null,
+                    ]);
+
+                    Notification::make()
+                        ->title('Session Summary Sent Successfully')
+                        ->success()
+                        ->body('The session summary email has been sent with all attachments including software onboarding files.')
+                        ->send();
+
+                } catch (\Exception $e) {
+                    Log::error('Error sending session summary in sendSessionSummaryAction: ' . $e->getMessage(), [
+                        'appointment_id' => $record->id,
+                        'trace' => $e->getTraceAsString()
+                    ]);
+
+                    Notification::make()
+                        ->title('Error Sending Session Summary')
+                        ->danger()
+                        ->body('Failed to send session summary: ' . $e->getMessage())
+                        ->send();
+                }
+            });
+    }
+
+    public static function viewAppointmentAction(): Action
+    {
+        return Action::make('view_appointment')
+            ->label('View Appointment')
+            ->icon('heroicon-o-eye')
+            ->color('success')
+            ->modalHeading('Implementation Appointment Details')
+            ->modalSubmitAction(false)
+            ->modalCancelActionLabel('Close')
+            ->form(function ($record) {
+                if (!$record) {
+                    return [
+                        TextInput::make('error')
+                            ->label('Error')
+                            ->default('No appointment record found.')
+                            ->disabled(),
+                    ];
+                }
+
+                return [
+                    DatePicker::make('date')
+                        ->label('DATE')
+                        ->default($record->date)
+                        ->disabled(),
+
+                    Grid::make(3)
+                        ->schema([
+                            Select::make('type')
+                                ->label('SESSION TYPE')
+                                ->options([
+                                    'KICK OFF MEETING SESSION' => 'KICK OFF MEETING SESSION',
+                                    'REVIEW SESSION' => 'REVIEW SESSION',
+                                ])
+                                ->default($record->type)
+                                ->disabled(),
+
+                            Select::make('appointment_type')
+                                ->label('APPOINTMENT TYPE')
+                                ->options([
+                                    'ONLINE' => 'ONLINE',
+                                    'ONSITE' => 'ONSITE',
+                                    'INHOUSE' => 'INHOUSE',
+                                ])
+                                ->default($record->appointment_type)
+                                ->disabled(),
+
+                            Select::make('implementer')
+                                ->label('IMPLEMENTER')
+                                ->options([$record->implementer => $record->implementer])
+                                ->default($record->implementer)
+                                ->disabled(),
+                        ]),
+
+                    Grid::make(3)
+                        ->schema([
+                            TextInput::make('session')
+                                ->label('SESSION')
+                                ->default($record->session)
+                                ->disabled(),
+
+                            TextInput::make('start_time')
+                                ->label('START TIME')
+                                ->default(Carbon::parse($record->start_time)->format('H:i'))
+                                ->disabled(),
+
+                            TextInput::make('end_time')
+                                ->label('END TIME')
+                                ->default(Carbon::parse($record->end_time)->format('H:i'))
+                                ->disabled(),
+                        ]),
+
+                    TextInput::make('required_attendees')
+                        ->label('REQUIRED ATTENDEES')
+                        ->default(function () use ($record) {
+                            if (!empty($record->required_attendees)) {
+                                try {
+                                    $attendees = json_decode($record->required_attendees, true);
+                                    if (is_array($attendees)) {
+                                        return implode(';', $attendees);
+                                    }
+                                    return $record->required_attendees;
+                                } catch (\Exception $e) {
+                                    return $record->required_attendees;
+                                }
+                            }
+                            return '';
+                        })
+                        ->disabled(),
+
+                    Textarea::make('remarks')
+                        ->label('REMARKS')
+                        ->rows(3)
+                        ->default($record->remarks ?? '')
+                        ->disabled(),
+                ];
+            });
+    }
+
+    private static function formatRecordingLinksForEmail(string $recordingLinks): string
+    {
+        if (empty($recordingLinks)) {
+            return 'Recording will be available after the meeting ends and is processed by Microsoft Teams (usually within 1-4 hours).';
+        }
+
+        $links = explode(';', $recordingLinks);
+        $links = array_filter(array_map('trim', $links));
+
+        if (empty($links)) {
+            return 'Recording will be available after the meeting ends and is processed by Microsoft Teams (usually within 1-4 hours).';
+        }
+
+        if (count($links) === 1) {
+            // Single recording - clean format
+            return '<a href="' . htmlspecialchars($links[0]) . '" target="_blank" style="color: #3b82f6; text-decoration: underline; font-weight: bold;">Click here to view recording</a>';
+        } else {
+            // Multiple recordings - clean format
+            $html = '';
+            foreach ($links as $index => $link) {
+                $partNumber = $index + 1;
+                if ($index > 0) {
+                    $html .= '<br><br>'; // Add space between parts
+                }
+                $html .= '<strong>Recording Part ' . $partNumber . ':</strong><br><a href="' . htmlspecialchars($link) . '" target="_blank" style="color: #3b82f6; text-decoration: underline; font-weight: bold;">Click here to view Part ' . $partNumber . '</a>';
+            }
+            return $html;
+        }
+    }
+}

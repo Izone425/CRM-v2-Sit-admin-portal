@@ -1,0 +1,55 @@
+# Composer / vendor
+/vendor
+
+# Node
+/node_modules
+/public/build
+/public/hot
+npm-debug.log
+yarn-error.log
+
+# Laravel runtime
+/.phpunit.cache
+/storage/*.key
+/storage/logs/*
+!/storage/logs/.gitignore
+/storage/framework/cache/data/*
+!/storage/framework/cache/data/.gitignore
+/storage/framework/sessions/*
+!/storage/framework/sessions/.gitignore
+/storage/framework/views/*
+!/storage/framework/views/.gitignore
+/storage/framework/testing/*
+/storage/app/*
+!/storage/app/.gitignore
+!/storage/app/public/
+/storage/app/public/*
+!/storage/app/public/.gitignore
+/storage/debugbar
+/bootstrap/cache/*.php
+
+# Secrets
+.env
+.env.backup
+.env.production
+/storage/keys/*.pem
+/storage/keys/*.key
+auth.json
+# Subproject .env.example currently contains live credentials — exclude until sanitized
+/timetec-crm-vm/.env.example
+
+# Filament/Livewire build artifacts
+/public/storage
+/public/css/filament
+/public/js/filament
+
+# IDE / OS
+.phpunit.result.cache
+.idea
+.vscode
+.DS_Store
+Thumbs.db
+Homestead.yaml
+Homestead.json
+.fleet
+.nova

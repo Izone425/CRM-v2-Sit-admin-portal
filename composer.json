@@ -1,0 +1,106 @@
+{
+    "name": "laravel/laravel",
+    "type": "project",
+    "description": "The skeleton application for the Laravel framework.",
+    "keywords": [
+        "laravel",
+        "framework"
+    ],
+    "license": "MIT",
+    "require": {
+        "php": "^8.1",
+        "alexjustesen/filament-spatie-laravel-activitylog": "^0.7",
+        "awcodes/filament-tiptap-editor": "^3.5",
+        "barryvdh/laravel-dompdf": "*",
+        "filament/filament": "^3.2",
+        "filament/notifications": "*",
+        "filament/tables": "*",
+        "google/protobuf": "^4.33",
+        "grpc/grpc": "^1.74",
+        "guava/calendar": "^1.10",
+        "guzzlehttp/guzzle": "^7.9",
+        "klsheng/myinvois-php-sdk": "^1.0",
+        "laravel/framework": "^10.10",
+        "laravel/sanctum": "^3.2",
+        "laravel/tinker": "^2.8",
+        "laraveldaily/laravel-invoices": "^3.1",
+        "league/flysystem-aws-s3-v3": "^3.0",
+        "league/oauth2-client": "*",
+        "livewire/livewire": "^3.5",
+        "maatwebsite/excel": "^3.1",
+        "malzariey/filament-daterangepicker-filter": "^3.1",
+        "microsoft/microsoft-graph": "1.42.0",
+        "njxqlus/filament-relation-manager-component": "^1.0",
+        "parfaitementweb/filament-country-field": "^2.2",
+        "phpoffice/phpspreadsheet": "^1.29",
+        "propaganistas/laravel-phone": "^5.3",
+        "saade/filament-fullcalendar": "^3.0",
+        "savannabits/filament-flatpickr": "^3.1",
+        "spatie/laravel-activitylog": "^4.9",
+        "thiagoalessio/tesseract_ocr": "^2.13",
+        "tomatophp/filament-twilio": "^1.0",
+        "twilio/sdk": "*",
+        "victorybiz/laravel-tel-input": "^1.6",
+        "webklex/laravel-imap": "^6.2",
+        "ysfkaya/filament-phone-input": "^3.1",
+        "zohocrm/php-sdk-8.0": "^1.0"
+    },
+    "require-dev": {
+        "fakerphp/faker": "^1.9.1",
+        "jetbrains/phpstorm-stubs": "^2024.3",
+        "laravel/pint": "^1.0",
+        "laravel/sail": "^1.18",
+        "mockery/mockery": "^1.4.4",
+        "nunomaduro/collision": "^7.0",
+        "phpunit/phpunit": "^10.1",
+        "spatie/laravel-ignition": "^2.0"
+    },
+    "autoload": {
+        "files": [
+            "app/Helpers/general_helpers.php"
+        ],
+        "psr-4": {
+            "App\\": "app/",
+            "Database\\Factories\\": "database/factories/",
+            "Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "post-autoload-dump": [
+            "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
+            "@php artisan package:discover --ansi",
+            "@php artisan filament:upgrade"
+        ],
+        "post-update-cmd": [
+            "@php artisan vendor:publish --tag=laravel-assets --ansi --force"
+        ],
+        "post-root-package-install": [
+            "@php -r \"file_exists('.env') || copy('.env.example', '.env');\""
+        ],
+        "post-create-project-cmd": [
+            "@php artisan key:generate --ansi"
+        ]
+    },
+    "extra": {
+        "laravel": {
+            "dont-discover": []
+        }
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "preferred-install": "dist",
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true,
+            "php-http/discovery": true,
+            "tbachert/spi": true
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
