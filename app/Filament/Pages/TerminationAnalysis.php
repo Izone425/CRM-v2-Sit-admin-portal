@@ -206,9 +206,24 @@ class TerminationAnalysis extends Page
             ->leftJoin('crm_company_listing as cl', 'c.company_id', '=', 'cl.f_company_id')
             ->leftJoin('crm_reseller_link as rl', 'c.company_id', '=', 'rl.f_id')
             ->leftJoin('crm_customer as reseller', 'rl.reseller_id', '=', 'reseller.company_id')
-            ->join(DB::raw("(SELECT f_company_id, MAX(f_expiry_date) as latest_expiry FROM crm_expiring_license WHERE f_type = 'PAID' AND f_name IN ({$allowedProducts}) GROUP BY f_company_id) as lic"), 'c.company_id', '=', 'lic.f_company_id')
+            ->leftJoin(DB::raw("(SELECT f_company_id, MAX(f_expiry_date) as latest_expiry FROM crm_expiring_license WHERE f_type = 'PAID' AND f_name IN ({$allowedProducts}) GROUP BY f_company_id) as lic"), 'c.company_id', '=', 'lic.f_company_id')
             ->where('c.f_status', 'I')
             ->whereNotNull('c.suspend_date')
+            ->where(function ($q) {
+                $q->whereNull('c.f_login')
+                  ->orWhere('c.f_login', 'NOT LIKE', '%@epicamera.com');
+            })
+            ->where(function ($q) {
+                $q->whereRaw('LOWER(c.f_company_name) NOT LIKE ?', ['ft %'])
+                  ->whereRaw('LOWER(c.f_company_name) NOT LIKE ?', ['ft.%'])
+                  ->whereRaw('LOWER(c.f_company_name) NOT LIKE ?', ['fttest%'])
+                  ->whereRaw('LOWER(c.f_company_name) NOT LIKE ?', ['%testing account%'])
+                  ->whereRaw('LOWER(c.f_company_name) NOT LIKE ?', ['test %'])
+                  ->whereRaw('LOWER(c.f_company_name) NOT LIKE ?', ['demo %'])
+                  ->whereRaw('LOWER(c.f_company_name) NOT LIKE ?', ['% demo'])
+                  ->whereRaw('LOWER(c.f_company_name) NOT LIKE ?', ['%poc -%'])
+                  ->whereRaw('LOWER(c.f_company_name) NOT LIKE ?', ['%old not used%']);
+            })
             ->whereBetween(DB::raw("CONVERT_TZ(c.suspend_date, '+00:00', '+08:00')"), [$dateFrom, $dateTo])
             ->select('c.company_id', 'c.f_company_name', 'c.f_company_type', 'c.f_modified_time', 'c.f_login', 'c.f_fullname', 'c.suspend_date', 'cl.f_country', 'lic.latest_expiry', 'reseller.f_company_type as reseller_type', 'rl.reseller_name');
 
@@ -305,9 +320,6 @@ class TerminationAnalysis extends Page
                 }
             }
         }
-
-        // Filter out companies with no paid licenses
-        $companies = $companies->filter(fn ($c) => isset($companiesWithPaidLicense[$c->company_id]));
 
         // Load termination notes
         $notesMap = TerminationAnalysisNote::whereIn('company_id', $companies->pluck('company_id')->toArray())
@@ -566,9 +578,24 @@ class TerminationAnalysis extends Page
         $allowedProducts = implode(',', array_map(fn ($p) => "'" . addslashes($p) . "'", self::$allowedProducts));
         $years = DB::connection('frontenddb')
             ->table('crm_customer as c')
-            ->join(DB::raw("(SELECT f_company_id, MAX(f_expiry_date) as latest_expiry FROM crm_expiring_license WHERE f_type = 'PAID' AND f_name IN ({$allowedProducts}) GROUP BY f_company_id) as lic"), 'c.company_id', '=', 'lic.f_company_id')
+            ->leftJoin(DB::raw("(SELECT f_company_id, MAX(f_expiry_date) as latest_expiry FROM crm_expiring_license WHERE f_type = 'PAID' AND f_name IN ({$allowedProducts}) GROUP BY f_company_id) as lic"), 'c.company_id', '=', 'lic.f_company_id')
             ->where('c.f_status', 'I')
             ->whereNotNull('c.suspend_date')
+            ->where(function ($q) {
+                $q->whereNull('c.f_login')
+                  ->orWhere('c.f_login', 'NOT LIKE', '%@epicamera.com');
+            })
+            ->where(function ($q) {
+                $q->whereRaw('LOWER(c.f_company_name) NOT LIKE ?', ['ft %'])
+                  ->whereRaw('LOWER(c.f_company_name) NOT LIKE ?', ['ft.%'])
+                  ->whereRaw('LOWER(c.f_company_name) NOT LIKE ?', ['fttest%'])
+                  ->whereRaw('LOWER(c.f_company_name) NOT LIKE ?', ['%testing account%'])
+                  ->whereRaw('LOWER(c.f_company_name) NOT LIKE ?', ['test %'])
+                  ->whereRaw('LOWER(c.f_company_name) NOT LIKE ?', ['demo %'])
+                  ->whereRaw('LOWER(c.f_company_name) NOT LIKE ?', ['% demo'])
+                  ->whereRaw('LOWER(c.f_company_name) NOT LIKE ?', ['%poc -%'])
+                  ->whereRaw('LOWER(c.f_company_name) NOT LIKE ?', ['%old not used%']);
+            })
             ->selectRaw('DISTINCT YEAR(CONVERT_TZ(c.suspend_date, \'+00:00\', \'+08:00\')) as year')
             ->orderByDesc('year')
             ->pluck('year')
