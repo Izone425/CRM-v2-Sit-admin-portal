@@ -73,6 +73,21 @@ class TerminationAnalysis extends Page
     public string $modalCompanyName = '';
     public string $modalReasonText = '';
 
+    // Forecast cost modal state
+    public bool $showForecastModal = false;
+    public array $forecastData = [
+        'headcount' => 0,
+        'rate'      => 1,
+        'months'    => 12,
+        'total'     => 0,
+        'modules'   => [
+            'TA' => ['headcount' => 0, 'cost' => 0],
+            'TL' => ['headcount' => 0, 'cost' => 0],
+            'TC' => ['headcount' => 0, 'cost' => 0],
+            'TP' => ['headcount' => 0, 'cost' => 0],
+        ],
+    ];
+
     public function mount(): void
     {
         $this->selectedYear = (string) now()->year;
@@ -837,6 +852,36 @@ class TerminationAnalysis extends Page
             ->title('Data refreshed')
             ->success()
             ->send();
+    }
+
+    public function generateForecastCost(): void
+    {
+        $headcount = (int) ($this->summary['total_headcount'] ?? 0);
+        $rate      = 1;
+        $months    = 12;
+
+        $modules = [];
+        foreach (['TA', 'TL', 'TC', 'TP'] as $key) {
+            $modHc = (int) ($this->summary['modules'][$key]['headcount'] ?? 0);
+            $modules[$key] = [
+                'headcount' => $modHc,
+                'cost'      => $modHc * $rate * $months,
+            ];
+        }
+
+        $this->forecastData = [
+            'headcount' => $headcount,
+            'rate'      => $rate,
+            'months'    => $months,
+            'total'     => $headcount * $rate * $months,
+            'modules'   => $modules,
+        ];
+        $this->showForecastModal = true;
+    }
+
+    public function closeForecastModal(): void
+    {
+        $this->showForecastModal = false;
     }
 
     public function openReasonModal(string $companyId): void

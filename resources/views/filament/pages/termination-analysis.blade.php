@@ -103,11 +103,27 @@
                 </div>
             </div>
 
+            {{-- Generate Forecast Cost --}}
+            <button wire:click="generateForecastCost"
+                style="display:flex; align-items:center; gap:6px; padding:7px 12px; margin-left:auto; border:none; border-radius:8px; background:#2563eb; cursor:pointer; font-size:0.8rem; color:#fff; font-weight:600;"
+                onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#2563eb'">
+                <svg xmlns="http://www.w3.org/2000/svg" style="width:16px; height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="4" y="2" width="16" height="20" rx="2"></rect>
+                    <line x1="8" y1="6" x2="16" y2="6"></line>
+                    <line x1="8" y1="10" x2="10" y2="10"></line>
+                    <line x1="12" y1="10" x2="16" y2="10"></line>
+                    <line x1="8" y1="14" x2="10" y2="14"></line>
+                    <line x1="12" y1="14" x2="16" y2="14"></line>
+                    <line x1="8" y1="18" x2="16" y2="18"></line>
+                </svg>
+                Generate Forecast Cost
+            </button>
+
             {{-- Combined Filter --}}
             @php
                 $activeFilterCount = ($categoryFilter !== 'all' ? 1 : 0) + ($reasonFilter !== 'all' ? 1 : 0);
             @endphp
-            <div x-data="{ open: false }" style="position:relative; margin-left:auto;">
+            <div x-data="{ open: false }" style="position:relative;">
                 <button @click="open = !open"
                     style="display:flex; align-items:center; gap:6px; padding:7px 12px; border:1px solid {{ $activeFilterCount > 0 ? '#1a56db' : '#d1d5db' }}; border-radius:8px; background:{{ $activeFilterCount > 0 ? '#eff6ff' : '#fff' }}; cursor:pointer; font-size:0.8rem; color:{{ $activeFilterCount > 0 ? '#1a56db' : '#475569' }}; font-weight:500;">
                     <svg style="width:16px; height:16px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -635,6 +651,120 @@
             <div style="display:flex; justify-content:flex-end; margin-top:16px;">
                 <button wire:click="closeModals"
                     style="padding:8px 16px; border:1px solid #d1d5db; border-radius:8px; background:#fff; cursor:pointer; font-size:0.8rem; color:#475569;">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+    @endif
+
+    {{-- Forecast Cost Modal --}}
+    @if($showForecastModal)
+    <div wire:click="closeForecastModal"
+         style="position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:9999; display:flex; align-items:center; justify-content:center;">
+        <div wire:click.stop
+             style="background:#fff; border-radius:12px; width:min(460px,92vw); padding:24px; box-shadow:0 20px 50px rgba(0,0,0,0.25);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                <h3 style="font-size:1rem; font-weight:700; color:#1a56db; margin:0;">Forecast Cost</h3>
+                <button wire:click="closeForecastModal" style="border:none; background:transparent; cursor:pointer; color:#94a3b8; font-size:1.5rem; line-height:1;">&times;</button>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:10px; font-size:0.9rem;">
+                <div style="display:flex; justify-content:space-between;">
+                    <span style="color:#6b7280;">Total Headcount</span>
+                    <span style="font-weight:600; color:#1f2937;">{{ number_format($forecastData['headcount']) }}</span>
+                </div>
+                <div style="display:flex; justify-content:space-between;">
+                    <span style="color:#6b7280;">Cost per Headcount</span>
+                    <span style="font-weight:600; color:#1f2937;">RM {{ number_format($forecastData['rate'], 2) }}</span>
+                </div>
+                <div style="display:flex; justify-content:space-between;">
+                    <span style="color:#6b7280;">Months</span>
+                    <span style="font-weight:600; color:#1f2937;">{{ $forecastData['months'] }}</span>
+                </div>
+
+                {{-- By Module breakdown (donut chart + legend) --}}
+                @php
+                    $forecastModuleLabels = ['TA' => 'Attendance', 'TL' => 'Leave', 'TC' => 'Claim', 'TP' => 'Payroll'];
+                    $forecastModuleColors = ['TA' => '#3b82f6', 'TL' => '#8b5cf6', 'TC' => '#f59e0b', 'TP' => '#10b981'];
+
+                    $forecastTotalHc = max(0, (int) ($forecastData['headcount'] ?? 0));
+                    $forecastCirc    = 2 * M_PI * 50;
+                    $forecastCumulative = 0;
+                    $forecastSegments = [];
+                    foreach (['TA','TL','TC','TP'] as $mod) {
+                        $hc  = (int) ($forecastData['modules'][$mod]['headcount'] ?? 0);
+                        $pct = $forecastTotalHc > 0 ? $hc / $forecastTotalHc : 0;
+                        $dash = $pct * $forecastCirc;
+                        $forecastSegments[$mod] = [
+                            'dash'   => $dash,
+                            'offset' => -$forecastCumulative,
+                            'pct'    => $pct,
+                        ];
+                        $forecastCumulative += $dash;
+                    }
+                @endphp
+                <div style="margin-top:6px; padding-top:14px; border-top:1px dashed #e5e7eb;">
+                    <div style="font-size:0.7rem; font-weight:700; color:#9ca3af; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:12px;">
+                        By Module
+                    </div>
+
+                    <div style="display:flex; align-items:center; gap:18px;">
+                        {{-- Donut chart --}}
+                        <div style="position:relative; flex-shrink:0; width:128px; height:128px;">
+                            <svg width="128" height="128" viewBox="0 0 120 120" style="display:block;">
+                                <circle cx="60" cy="60" r="50" fill="none" stroke="#f1f5f9" stroke-width="18"/>
+                                <g transform="rotate(-90 60 60)">
+                                    @foreach(['TA','TL','TC','TP'] as $mod)
+                                        @if($forecastSegments[$mod]['pct'] > 0)
+                                            <circle cx="60" cy="60" r="50" fill="none"
+                                                stroke="{{ $forecastModuleColors[$mod] }}"
+                                                stroke-width="18"
+                                                stroke-dasharray="{{ $forecastSegments[$mod]['dash'] }} {{ $forecastCirc - $forecastSegments[$mod]['dash'] }}"
+                                                stroke-dashoffset="{{ $forecastSegments[$mod]['offset'] }}"/>
+                                        @endif
+                                    @endforeach
+                                </g>
+                            </svg>
+                            <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; pointer-events:none;">
+                                <span style="font-size:0.55rem; font-weight:700; color:#9ca3af; letter-spacing:0.1em;">HEADCOUNT</span>
+                                <span style="font-size:1.1rem; font-weight:800; color:#1f2937; line-height:1.1; margin-top:2px;">{{ number_format($forecastTotalHc) }}</span>
+                            </div>
+                        </div>
+
+                        {{-- Legend --}}
+                        <div style="display:flex; flex-direction:column; gap:9px; flex:1; min-width:0;">
+                            @foreach(['TA','TL','TC','TP'] as $mod)
+                                <div style="display:flex; align-items:flex-start; gap:8px; font-size:0.8rem;">
+                                    <span style="width:9px; height:9px; border-radius:9999px; background:{{ $forecastModuleColors[$mod] }}; margin-top:5px; flex-shrink:0;"></span>
+                                    <div style="flex:1; min-width:0;">
+                                        <div style="display:flex; justify-content:space-between; align-items:baseline; gap:6px;">
+                                            <span style="font-weight:600; color:#1f2937;">{{ $forecastModuleLabels[$mod] }}</span>
+                                            <span style="font-weight:600; color:#1f2937; white-space:nowrap;">RM {{ number_format($forecastData['modules'][$mod]['cost'] ?? 0, 2) }}</span>
+                                        </div>
+                                        <div style="font-size:0.7rem; color:#9ca3af; margin-top:1px;">
+                                            {{ number_format($forecastData['modules'][$mod]['headcount'] ?? 0) }} HC
+                                            @if($forecastTotalHc > 0)
+                                                <span style="color:#cbd5e1;">·</span> {{ number_format($forecastSegments[$mod]['pct'] * 100, 1) }}%
+                                            @endif
+                                        </div>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                </div>
+
+                <hr style="border:none; border-top:1px solid #e5e7eb; margin:6px 0;">
+                <div style="display:flex; justify-content:space-between; font-size:1rem;">
+                    <span style="font-weight:700; color:#1f2937;">Total Forecast Cost</span>
+                    <span style="font-weight:700; color:#2563eb;">RM {{ number_format($forecastData['total'], 2) }}</span>
+                </div>
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; margin-top:20px;">
+                <button wire:click="closeForecastModal"
+                    style="padding:8px 16px; border:none; border-radius:8px; background:#1f2937; color:#fff; font-size:0.85rem; font-weight:600; cursor:pointer;">
                     Close
                 </button>
             </div>
