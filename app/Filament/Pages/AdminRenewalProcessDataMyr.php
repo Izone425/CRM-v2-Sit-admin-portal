@@ -203,6 +203,80 @@ class AdminRenewalProcessDataMyr extends Page implements HasTable
     protected $renewalCache = [];
     protected $resellerCache = [];
 
+    // Forecast cost modal state
+    public bool $showForecastModal = false;
+    public array $forecastData = [
+        'headcount' => 0,
+        'rate'      => 1,
+        'months'    => 12,
+        'total'     => 0,
+        'modules'   => [
+            'TA' => ['headcount' => 0, 'cost' => 0],
+            'TL' => ['headcount' => 0, 'cost' => 0],
+            'TC' => ['headcount' => 0, 'cost' => 0],
+            'TP' => ['headcount' => 0, 'cost' => 0],
+        ],
+    ];
+
+    public function generateForecastCost(): void
+    {
+        $companyIds = $this->getFilteredCompanyIds();
+
+        $licenses = collect();
+        if (!empty($companyIds)) {
+            $licenses = RenewalDataMyr::query()
+                ->whereIn('f_company_id', $companyIds)
+                ->get(['f_unit', 'f_name']);
+        }
+
+        $moduleKeywords = [
+            'TA' => ['TimeTec TA', 'TimeTec Attendance'],
+            'TL' => ['TimeTec Leave'],
+            'TC' => ['TimeTec Claim'],
+            'TP' => ['TimeTec Payroll'],
+        ];
+        $modules = ['TA' => 0, 'TL' => 0, 'TC' => 0, 'TP' => 0];
+
+        foreach ($licenses as $lic) {
+            $hc = (int) ($lic->f_unit ?? 0);
+            if ($hc <= 0) continue;
+            foreach ($moduleKeywords as $key => $keywords) {
+                foreach ($keywords as $kw) {
+                    if (str_contains($lic->f_name ?? '', $kw)) {
+                        $modules[$key] += $hc;
+                        break 2;
+                    }
+                }
+            }
+        }
+
+        $rate   = 1;
+        $months = 12;
+        $totalHc = array_sum($modules);
+
+        $modulesData = [];
+        foreach (['TA','TL','TC','TP'] as $key) {
+            $modulesData[$key] = [
+                'headcount' => $modules[$key],
+                'cost'      => $modules[$key] * $rate * $months,
+            ];
+        }
+
+        $this->forecastData = [
+            'headcount' => $totalHc,
+            'rate'      => $rate,
+            'months'    => $months,
+            'total'     => $totalHc * $rate * $months,
+            'modules'   => $modulesData,
+        ];
+        $this->showForecastModal = true;
+    }
+
+    public function closeForecastModal(): void
+    {
+        $this->showForecastModal = false;
+    }
+
     public function mount(): void
     {
         $today = Carbon::now()->format('d/m/Y');
@@ -999,6 +1073,11 @@ class AdminRenewalProcessDataMyr extends Page implements HasTable
                     }),
             ])
             ->headerActions([
+                Action::make('generate_forecast_cost')
+                    ->label('Generate Forecast Cost')
+                    ->icon('heroicon-o-document-text')
+                    ->color('info')
+                    ->action(fn () => $this->generateForecastCost()),
                 Action::make('export_to_excel')
                     ->label('Export to Excel')
                     ->icon('heroicon-o-arrow-down-tray')
