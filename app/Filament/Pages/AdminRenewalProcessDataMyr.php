@@ -322,6 +322,24 @@ class AdminRenewalProcessDataMyr extends Page implements HasTable
                     $baseQuery->whereNotIn('f_company_id', $excludedCompanyIds);
                 }
 
+                // Exclude companies that already have any relevant MYR license expiring beyond current year
+                // (multi-year subscribers / pre-renewed customers — no current renewal action needed)
+                $endOfCurrentYear = Carbon::now()->endOfYear()->format('Y-m-d');
+
+                $preRenewedQuery = RenewalDataMyr::query()
+                    ->where('f_currency', 'MYR')
+                    ->where('f_expiry_date', '>', $endOfCurrentYear);
+                RenewalDataMyr::applyProductExclusions($preRenewedQuery);
+
+                $preRenewedCompanyIds = $preRenewedQuery
+                    ->distinct()
+                    ->pluck('f_company_id')
+                    ->toArray();
+
+                if (!empty($preRenewedCompanyIds)) {
+                    $baseQuery->whereNotIn('f_company_id', $preRenewedCompanyIds);
+                }
+
                 // ✅ Optimized aggregation - avoid ANY_VALUE and complex calculations
                 $baseQuery->selectRaw('
                     f_company_id,
