@@ -50,7 +50,9 @@ Route::get('/', function () {
 });
 
 // Public Partner Application Form (Reseller / Distributor)
-Route::get('/become-partner', \App\Livewire\PartnerApplicationForm::class)->name('partner.apply');
+Route::get('/become-partner/{partnerType}', \App\Livewire\PartnerApplicationForm::class)
+    ->where('partnerType', 'reseller|distributor')
+    ->name('partner.apply');
 
 // S3 File Proxy Route
 Route::get('/s3-file', [S3FileProxyController::class, 'serve'])->name('s3.serve')->middleware(['auth']);

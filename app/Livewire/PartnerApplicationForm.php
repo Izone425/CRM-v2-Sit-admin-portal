@@ -16,6 +16,12 @@ class PartnerApplicationForm extends Component
     // Program selection
     public string $partner_type = 'reseller';
 
+    // Module selection
+    public array $categories = [];
+
+    // Headcount
+    public ?int $headcount = null;
+
     // Company Information
     public string $company_name = '';
     public string $address = '';
@@ -47,13 +53,18 @@ class PartnerApplicationForm extends Component
     public Collection $stateOptions;
     public Collection $industryOptions;
 
-    public bool $submitted = false;
-
-    public function mount(): void
+    public function mount(string $partnerType): void
     {
+        $this->partner_type = $partnerType;
+
         $this->countryOptions = $this->safePluck('countries', fn () => Country::query()->orderBy('name')->pluck('name', 'name'));
         $this->stateOptions = $this->safePluck('state_codes', fn () => StateCode::query()->orderBy('name')->pluck('name', 'name'));
         $this->industryOptions = $this->safePluck('industries', fn () => Industry::query()->where('is_active', true)->orderBy('name')->pluck('name', 'name'));
+    }
+
+    public function getProgramLabelProperty(): string
+    {
+        return $this->partner_type === 'distributor' ? 'Distributor' : 'Reseller';
     }
 
     private function safePluck(string $table, \Closure $resolver): Collection
@@ -71,8 +82,6 @@ class PartnerApplicationForm extends Component
     protected function rules(): array
     {
         return [
-            'partner_type' => ['required', 'in:reseller,distributor'],
-
             'company_name' => ['required', 'string', 'max:255'],
             'address' => ['required', 'string', 'max:500'],
             'state' => ['required', 'string', 'max:100'],
@@ -92,6 +101,11 @@ class PartnerApplicationForm extends Component
             'designation' => ['required', 'string', 'max:100'],
             'existing_fingertec_reseller' => ['required', 'in:0,1'],
 
+            'categories' => ['required', 'array', 'min:1'],
+            'categories.*' => ['in:attendance,leave,claim,payroll'],
+
+            'headcount' => ['required', 'integer', 'min:1', 'max:100'],
+
             'consent_setup_permission' => ['accepted'],
             'consent_marketing' => ['boolean'],
         ];
@@ -102,15 +116,21 @@ class PartnerApplicationForm extends Component
         return [
             'consent_setup_permission.accepted' => 'You must confirm you have permission to set up this account.',
             'password.confirmed' => 'Password confirmation does not match.',
+            'categories.required' => 'Please select at least one module.',
+            'categories.min' => 'Please select at least one module.',
+            'headcount.max' => 'Headcount must be 100 or less.',
+            'headcount.min' => 'Headcount must be at least 1.',
         ];
     }
 
-    public function submit(): void
+    public function submit()
     {
         $data = $this->validate();
 
         PartnerApplication::create([
-            'partner_type' => $data['partner_type'],
+            'partner_type' => $this->partner_type,
+            'categories' => $data['categories'],
+            'headcount' => $data['headcount'],
             'company_name' => $data['company_name'],
             'address' => $data['address'],
             'state' => $data['state'],
@@ -133,15 +153,9 @@ class PartnerApplicationForm extends Component
             'status' => 'pending',
         ]);
 
-        $this->reset([
-            'company_name', 'address', 'state', 'postcode', 'country',
-            'telephone', 'company_website', 'business_type', 'industry', 'years_in_business',
-            'email', 'password', 'password_confirmation', 'mobile_phone',
-            'first_name', 'last_name', 'designation', 'existing_fingertec_reseller',
-            'consent_setup_permission', 'consent_marketing',
-        ]);
-
-        $this->submitted = true;
+        return redirect()
+            ->route('partner.apply', ['partnerType' => $this->partner_type])
+            ->with('partner_submitted', true);
     }
 
     public function render()

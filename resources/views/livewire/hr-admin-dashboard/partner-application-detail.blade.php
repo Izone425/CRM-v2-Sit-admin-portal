@@ -11,6 +11,15 @@
         '6_10' => '6 - 10 years',
         'more_than_10' => 'More than 10 years',
     ];
+    $moduleLabels = [
+        'attendance' => 'Attendance',
+        'leave' => 'Leave',
+        'claim' => 'Claim',
+        'payroll' => 'Payroll',
+    ];
+    $modulesDisplay = collect($application->categories ?? [])
+        ->map(fn ($k) => $moduleLabels[$k] ?? $k)
+        ->implode(', ');
 
     $row = fn ($label, $value) =>
         '<div class="grid grid-cols-3 gap-3 py-1.5 text-sm">'
@@ -24,6 +33,8 @@
         <h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Program</h3>
         <div class="rounded-lg border border-gray-200 px-4 py-2 divide-y divide-gray-100">
             {!! $row('Program', $programLabel) !!}
+            {!! $row('Modules', $modulesDisplay) !!}
+            {!! $row('Headcount', $application->headcount) !!}
         </div>
     </section>
 

@@ -53,3 +53,5 @@ Homestead.yaml
 Homestead.json
 .fleet
 .nova
+.claude/
+/File to refer/

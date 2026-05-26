@@ -13,6 +13,7 @@ class PartnerApplication extends Model
     protected $fillable = [
         'partner_type',
         'categories',
+        'headcount',
         'company_name',
         'address',
         'state',
@@ -45,6 +46,7 @@ class PartnerApplication extends Model
 
     protected $casts = [
         'categories' => 'array',
+        'headcount' => 'integer',
         'existing_fingertec_reseller' => 'boolean',
         'consent_setup_permission' => 'boolean',
         'consent_marketing' => 'boolean',
