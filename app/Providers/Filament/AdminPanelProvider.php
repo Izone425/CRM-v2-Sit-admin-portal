@@ -214,6 +214,7 @@ class AdminPanelProvider extends PanelProvider
             ->assets([
                 Css::make('styles', public_path('/css/app/styles.css')),
                 Css::make('sidebar', public_path('/css/custom-sidebar.css')),
+                Css::make('admin-theme', public_path('/css/admin-theme.css')),
                 \Filament\Support\Assets\Js::make('sidebar-js', public_path('/js/custom-sidebar.js')),
             ])
             ->renderHook(

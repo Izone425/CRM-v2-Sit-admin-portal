@@ -1,3 +1,3 @@
 <x-filament-panels::page>
-    {{ $this->table }}
+    @livewire('hr-admin-dashboard.hr-reseller-table')
 </x-filament-panels::page>

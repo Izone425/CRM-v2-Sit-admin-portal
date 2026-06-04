@@ -31,7 +31,7 @@
         </div>
 
         @if ($activeTab === 'all')
-            @livewire('hr-admin-dashboard.hr-license-table', ['category' => 'Reseller'], key('hr-license-reseller'))
+            @livewire('hr-admin-dashboard.hr-reseller-table', ['showHero' => true], key('hr-resellers-all'))
         @else
             @livewire('hr-admin-dashboard.partner-applications-table', ['type' => 'reseller'], key('pending-reseller'))
         @endif

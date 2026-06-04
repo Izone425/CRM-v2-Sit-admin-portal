@@ -59,6 +59,29 @@ class HrLicenseTable extends Component implements HasForms, HasTable
             ->count();
     }
 
+    public function getEnabledCount()
+    {
+        return HrLicense::query()
+            ->when($this->category, fn ($q) => $q->where('license_category', $this->category))
+            ->where('status', 'Enabled')
+            ->count();
+    }
+
+    public function getDisabledCount()
+    {
+        return HrLicense::query()
+            ->when($this->category, fn ($q) => $q->where('license_category', $this->category))
+            ->where('status', 'Disabled')
+            ->count();
+    }
+
+    public function getSubscriberCount()
+    {
+        return HrLicense::query()
+            ->where('license_category', 'Subscriber')
+            ->count();
+    }
+
     public function table(Table $table): Table
     {
         $category = $this->category;

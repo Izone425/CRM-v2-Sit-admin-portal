@@ -17,4 +17,9 @@ class HrLicense extends Page
     protected static bool $shouldRegisterNavigation = false;
 
     protected static ?string $slug = 'hr-license';
+
+    public function getHeading(): string
+    {
+        return '';
+    }
 }

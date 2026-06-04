@@ -1,0 +1,410 @@
+/* =========================================================================
+   Bold Gradient Dashboard — Admin Panel Theme
+   Loaded via Css::make('admin-theme', public_path('/css/admin-theme.css'))
+   on AdminPanelProvider. Plain CSS — does not depend on Tailwind compilation.
+
+   Assumes the `status` and `license_category` TextColumns on HrLicenseTable
+   do NOT call ->icon() (the leading bullet on status badges is added via
+   ::before content; an icon would stack with it).
+   ========================================================================= */
+
+@import url('https://fonts.bunny.net/css?family=plus-jakarta-sans:400,500,600,700,800&display=swap');
+
+:root {
+    /* Typography */
+    --tt-font-sans: 'Plus Jakarta Sans', 'Poppins', system-ui, -apple-system, sans-serif;
+
+    /* Brand gradient (banner) */
+    --tt-grad-from: #6C3FDB;
+    --tt-grad-to:   #4F46E5;
+
+    /* Stat accents */
+    --tt-accent-total:       #6C3FDB;
+    --tt-accent-enabled:     #10B981;
+    --tt-accent-disabled:    #EF4444;
+    --tt-accent-subscribers: #F59E0B;
+
+    /* Ink + surfaces */
+    --tt-ink-strong: #1a1a2e;
+    --tt-ink-muted:  #888888;
+    --tt-ink-soft:   #666666;
+    --tt-divider:    #f0f0f0;
+    --tt-border:     #e5e7eb;
+    --tt-header-bg:  #fafafa;
+    --tt-hover-row:  #f8f7fc;
+
+    /* Status pills */
+    --tt-status-enabled-bg:  #D1FAE5;
+    --tt-status-enabled-fg:  #065F46;
+    --tt-status-disabled-bg: #FEE2E2;
+    --tt-status-disabled-fg: #991B1B;
+
+    /* Radius + shadow */
+    --tt-radius-card:    12px;
+    --tt-radius-card-lg: 16px;
+    --tt-radius-pill:    20px;
+    --tt-radius-input:   10px;
+    --tt-shadow-soft: 0 2px 8px  rgb(0 0 0 / 0.08);
+    --tt-shadow-card: 0 2px 12px rgb(0 0 0 / 0.08);
+}
+
+/* =========================================================================
+   Typography baseline
+   ========================================================================= */
+
+.fi-body,
+.fi-panel,
+.fi-main,
+.fi-modal-window {
+    font-family: var(--tt-font-sans);
+    color: var(--tt-ink-strong);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+}
+
+/* =========================================================================
+   Gradient hero banner
+   ========================================================================= */
+
+.tt-banner {
+    background: linear-gradient(135deg, var(--tt-grad-from) 0%, var(--tt-grad-to) 100%);
+    padding: 12px 20px;
+    border-radius: var(--tt-radius-card-lg);
+    color: #fff;
+    margin-bottom: 16px;
+    box-shadow: 0 6px 18px -12px rgb(108 63 219 / 0.30);
+}
+
+.tt-banner h1 {
+    font-family: var(--tt-font-sans);
+    font-weight: 700;
+    font-size: 18px;
+    line-height: 1.25;
+    letter-spacing: -0.01em;
+    margin: 0;
+    color: #fff;
+}
+
+.tt-banner p {
+    font-family: var(--tt-font-sans);
+    font-weight: 400;
+    font-size: 12px;
+    line-height: 1.4;
+    margin: 2px 0 0;
+    opacity: 0.85;
+    color: #fff;
+}
+
+/* =========================================================================
+   Stat tiles
+   ========================================================================= */
+
+.tt-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+@media (max-width: 900px) {
+    .tt-stats { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 540px) {
+    .tt-stats { grid-template-columns: 1fr; }
+}
+
+.tt-stat {
+    background: #fff;
+    border-radius: var(--tt-radius-card);
+    padding: 14px;
+    box-shadow: var(--tt-shadow-soft);
+    border-left: 4px solid var(--tt-stat-accent, var(--tt-accent-total));
+    transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.tt-stat:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgb(0 0 0 / 0.10);
+}
+
+.tt-stat__label {
+    color: var(--tt-ink-muted);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.9px;
+    margin: 0;
+    font-weight: 500;
+    font-family: var(--tt-font-sans);
+}
+
+.tt-stat__value {
+    font-family: var(--tt-font-sans);
+    font-weight: 800;
+    font-size: 24px;
+    line-height: 1.1;
+    color: var(--tt-stat-value-color, var(--tt-ink-strong));
+    margin: 2px 0 0;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+}
+
+.tt-stat--total       { --tt-stat-accent: var(--tt-accent-total);       --tt-stat-value-color: var(--tt-ink-strong); }
+.tt-stat--enabled     { --tt-stat-accent: var(--tt-accent-enabled);     --tt-stat-value-color: var(--tt-accent-enabled); }
+.tt-stat--disabled    { --tt-stat-accent: var(--tt-accent-disabled);    --tt-stat-value-color: var(--tt-accent-disabled); }
+.tt-stat--subscribers { --tt-stat-accent: var(--tt-accent-subscribers); --tt-stat-value-color: var(--tt-accent-subscribers); }
+
+/* =========================================================================
+   Table card chrome
+   ========================================================================= */
+
+.fi-ta {
+    border-radius: var(--tt-radius-card-lg);
+    box-shadow: var(--tt-shadow-card);
+    overflow: hidden;
+    background: #fff;
+    border: 1px solid var(--tt-divider);
+}
+
+.fi-ta-ctn {
+    background: #fff;
+}
+
+.fi-ta-header-toolbar {
+    padding: 12px 20px !important;
+    border-bottom: 1px solid var(--tt-divider);
+}
+
+/* Table head */
+.fi-ta-table thead {
+    background: var(--tt-header-bg);
+}
+
+.fi-ta-header-cell {
+    text-transform: uppercase;
+    font-size: 11px !important;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+    color: var(--tt-ink-soft);
+    padding-top: 14px !important;
+    padding-bottom: 14px !important;
+}
+
+.fi-ta-header-cell-label,
+.fi-ta-header-cell-label-text {
+    font-weight: 600;
+    color: var(--tt-ink-soft);
+}
+
+/* Flatten zebra striping (.striped() in PHP); use hairline dividers instead */
+.fi-ta-table tbody tr {
+    background: #fff !important;
+    transition: background 120ms ease;
+}
+
+.fi-ta-table tbody tr + tr {
+    border-top: 1px solid var(--tt-divider);
+}
+
+.fi-ta-table tbody tr:hover {
+    background: var(--tt-hover-row) !important;
+}
+
+.fi-ta-cell {
+    padding-top: 14px !important;
+    padding-bottom: 14px !important;
+    color: var(--tt-ink-strong);
+}
+
+/* Primary-colored links (Handover ID, Company Name) */
+.fi-ta-cell a,
+.fi-ta-cell .fi-link,
+.fi-ta-text-item-label.fi-color-primary {
+    color: var(--tt-accent-total);
+    font-weight: 600;
+    text-decoration: none;
+    transition: color 120ms ease;
+    font-variant-numeric: tabular-nums;
+}
+
+.fi-ta-cell a:hover,
+.fi-ta-cell .fi-link:hover {
+    color: var(--tt-grad-to);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    text-decoration-thickness: 1.5px;
+}
+
+/* =========================================================================
+   Search input
+   ========================================================================= */
+
+.fi-input-wrp {
+    border: 1.5px solid var(--tt-border) !important;
+    border-radius: var(--tt-radius-input) !important;
+    background: #fff;
+    transition: border-color 140ms ease, box-shadow 140ms ease;
+    box-shadow: none !important;
+}
+
+.fi-input-wrp:focus-within {
+    border-color: var(--tt-accent-total) !important;
+    box-shadow: 0 0 0 4px rgb(108 63 219 / 0.12) !important;
+}
+
+.fi-input {
+    background: transparent !important;
+    padding: 10px 16px !important;
+    font-size: 14px;
+    color: var(--tt-ink-strong);
+}
+
+.fi-input::placeholder {
+    color: var(--tt-ink-muted);
+}
+
+/* =========================================================================
+   Toolbar icon buttons (filter funnel, columns toggle)
+   ========================================================================= */
+
+.fi-ta-header-toolbar .fi-icon-btn {
+    border-radius: var(--tt-radius-input);
+    background: #fff;
+    border: 1.5px solid var(--tt-border);
+    color: var(--tt-ink-soft);
+    transition: border-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
+    padding: 8px;
+}
+
+.fi-ta-header-toolbar .fi-icon-btn:hover {
+    border-color: var(--tt-accent-total);
+    color: var(--tt-accent-total);
+    box-shadow: 0 0 0 3px rgb(108 63 219 / 0.10);
+}
+
+/* Filter-count pill: brand purple, not red. Scoped under .fi-ta-header-toolbar
+   so the global notification bell badge keeps its existing red styling. */
+.fi-ta-header-toolbar .fi-icon-btn-badge-ctn .fi-badge {
+    background-color: var(--tt-accent-total) !important;
+    color: #fff !important;
+    border-color: var(--tt-accent-total) !important;
+    border-radius: 9999px;
+    font-weight: 600;
+    font-size: 10px;
+    min-width: 16px;
+    padding: 0 5px;
+}
+
+/* =========================================================================
+   Status badges (success / danger) — green & red pills with leading bullet
+   Spec: only Status column uses success/danger colors; these columns do not
+   call ->icon(), so the ::before bullet is safe.
+   ========================================================================= */
+
+.fi-badge {
+    border-radius: var(--tt-radius-pill) !important;
+    padding: 4px 12px !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.005em;
+    line-height: 1.4;
+    display: inline-flex;
+    align-items: center;
+    gap: 0;
+}
+
+.fi-badge.fi-color-success {
+    background-color: var(--tt-status-enabled-bg) !important;
+    color: var(--tt-status-enabled-fg) !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+.fi-badge.fi-color-danger {
+    background-color: var(--tt-status-disabled-bg) !important;
+    color: var(--tt-status-disabled-fg) !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+.fi-badge.fi-color-success::before,
+.fi-badge.fi-color-danger::before {
+    content: '\2022';
+    margin-right: 6px;
+    font-size: 14px;
+    line-height: 1;
+}
+
+/* Category badges (Subscriber/Reseller/Distributor) — keep Filament hues,
+   unify shape with status pills, no leading bullet. */
+.fi-badge.fi-color-gray,
+.fi-badge.fi-color-info,
+.fi-badge.fi-color-purple {
+    border-radius: var(--tt-radius-pill) !important;
+    padding: 4px 12px !important;
+    font-weight: 500 !important;
+}
+
+/* =========================================================================
+   Pagination
+   ========================================================================= */
+
+.fi-pagination-item button,
+.fi-pagination-item a {
+    border-radius: var(--tt-radius-input) !important;
+    font-weight: 600;
+    color: var(--tt-ink-soft);
+    transition: background 120ms ease, color 120ms ease;
+    min-width: 36px;
+}
+
+.fi-pagination-item button:hover,
+.fi-pagination-item a:hover {
+    background: var(--tt-hover-row);
+    color: var(--tt-accent-total);
+}
+
+.fi-pagination-item[aria-current="page"] button,
+.fi-pagination-item[aria-current="page"] a {
+    background: var(--tt-accent-total) !important;
+    color: #fff !important;
+    box-shadow: 0 2px 6px rgb(108 63 219 / 0.30);
+}
+
+/* =========================================================================
+   Row action button (the "View" button)
+   ========================================================================= */
+
+.fi-ta-actions .fi-ac-btn-action,
+.fi-ac-btn-action.fi-color-gray {
+    border-radius: var(--tt-radius-input);
+    background: transparent;
+    color: var(--tt-ink-soft);
+    font-weight: 500;
+    transition: background 120ms ease, color 120ms ease;
+}
+
+.fi-ta-actions .fi-ac-btn-action:hover,
+.fi-ac-btn-action.fi-color-gray:hover {
+    background: rgb(108 63 219 / 0.06);
+    color: var(--tt-accent-total);
+}
+
+/* =========================================================================
+   Dropdowns / modals — soften
+   ========================================================================= */
+
+.fi-dropdown-panel {
+    border-radius: var(--tt-radius-card) !important;
+    box-shadow: 0 1px 0 rgb(20 14 40 / 0.04), 0 16px 40px -20px rgb(20 14 40 / 0.20);
+    border: 1px solid var(--tt-border);
+}
+
+.fi-modal-window {
+    border-radius: var(--tt-radius-card-lg) !important;
+    box-shadow: 0 1px 0 rgb(20 14 40 / 0.06), 0 32px 80px -30px rgb(20 14 40 / 0.28);
+}
+
+/* Notification badge (panel-wide red bell) is preserved as red by the inline
+   styles render-hook in AdminPanelProvider — do not override here. */
