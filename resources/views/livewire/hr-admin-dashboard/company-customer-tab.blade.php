@@ -44,6 +44,7 @@
         </tr>
     </table>
 
+    @if ($showResellersSection)
     {{-- Resellers Section --}}
     <div style="margin-bottom:32px;">
         <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
@@ -114,6 +115,7 @@
         </div>
     </div>
     <div style="height:16px;"></div>
+    @endif
     {{-- Customers (Subscriber) Section --}}
     <div>
         <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">

@@ -5,8 +5,11 @@ namespace App\Livewire\HrAdminDashboard;
 use App\Models\ResellerV2;
 use Filament\Forms\Components\Grid;
 use Filament\Forms\Components\Hidden;
+use Filament\Forms\Components\Placeholder;
+use Filament\Forms\Components\Section;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Get;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
@@ -121,6 +124,40 @@ class HrResellerTable extends Component implements HasForms, HasTable
         ];
 
         $schema = [];
+
+        // Program section — mirrors the application detail (modules + headcount)
+        // so a reseller created from an approved application stays in sync.
+        if ($mode === 'view') {
+            $moduleLabels = [
+                'attendance' => 'Attendance',
+                'leave' => 'Leave',
+                'claim' => 'Claim',
+                'payroll' => 'Payroll',
+            ];
+
+            $schema[] = Section::make('Program')
+                ->schema([
+                    Grid::make(3)->schema([
+                        Placeholder::make('program_label')
+                            ->label('Program')
+                            ->content('RESELLER'),
+
+                        Placeholder::make('modules_display')
+                            ->label('Modules')
+                            ->content(function (Get $get) use ($moduleLabels) {
+                                $modules = collect($get('modules') ?? [])
+                                    ->map(fn ($key) => $moduleLabels[$key] ?? ucfirst((string) $key))
+                                    ->implode(', ');
+
+                                return $modules !== '' ? $modules : '—';
+                            }),
+
+                        Placeholder::make('headcount')
+                            ->label('Headcount')
+                            ->content(fn (Get $get) => $get('headcount') ?: '—'),
+                    ]),
+                ]);
+        }
 
         $companyNameField = $isCreate
             ? Select::make('company_name')
@@ -748,6 +785,8 @@ class HrResellerTable extends Component implements HasForms, HasTable
                         'block_payment_gateway' => $record->block_payment_gateway ?? 'pending',
                         'bypass_invoice' => $record->bypass_invoice ?? 'no',
                         'advanced_modules' => $record->advanced_modules ?? 'disable',
+                        'modules' => $record->modules ?? [],
+                        'headcount' => $record->headcount,
                         'created_at' => $record->created_at?->format('d M Y, H:i'),
                     ])
                     ->form(static::getResellerFormSchema('view')),

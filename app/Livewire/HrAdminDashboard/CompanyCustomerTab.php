@@ -29,10 +29,15 @@ class CompanyCustomerTab extends Component
     public int $subscriberActiveCount = 0;
     public int $subscriberInactiveCount = 0;
 
+    // Resellers sub-section is only meaningful when the parent is a Distributor.
+    // A Reseller has only downstream customers, no downstream resellers.
+    public bool $showResellersSection = true;
+
     public function mount(?int $softwareHandoverId = null, array $companyData = [])
     {
         $this->softwareHandoverId = $softwareHandoverId;
         $this->companyData = $companyData;
+        $this->showResellersSection = ($companyData['license_category'] ?? 'Subscriber') !== 'Reseller';
         $this->loadCustomers();
     }
 
@@ -43,7 +48,6 @@ class CompanyCustomerTab extends Component
         if (!$softwareHandover || !$softwareHandover->reseller_id) {
             $this->resellers = [];
             $this->subscribers = [];
-            $this->appendDummyRecords();
             return;
         }
 
@@ -128,8 +132,6 @@ class CompanyCustomerTab extends Component
             $this->resellers = [];
             $this->subscribers = [];
         }
-
-        $this->appendDummyRecords();
     }
 
     protected function computeCounts(int $resellerId, int $currentSwId): void
@@ -154,66 +156,6 @@ class CompanyCustomerTab extends Component
         $this->resellerInactiveCount = (int) ($resellerCounts->inactive_count ?? 0);
         $this->subscriberActiveCount = (int) ($subscriberCounts->active_count ?? 0);
         $this->subscriberInactiveCount = (int) ($subscriberCounts->inactive_count ?? 0);
-    }
-
-    protected function appendDummyRecords(): void
-    {
-        // Fetch real SoftwareHandover records for clickable navigation
-        $realSwRecords = SoftwareHandover::where('id', '!=', $this->softwareHandoverId ?? 0)
-            ->select('id', 'hr_account_id', 'hr_company_id')
-            ->take(4)
-            ->get();
-
-        // ABC Technology is now a real DB record (loaded via loadCustomers), so only add other dummy records
-        $dummyResellers = [
-            [
-                'id' => $realSwRecords[0]->hr_account_id ?? 'RS-002',
-                'software_handover_id' => $realSwRecords[0]->id ?? null,
-                'hr_account_id' => $realSwRecords[0]->hr_account_id ?? null,
-                'hr_company_id' => $realSwRecords[0]->hr_company_id ?? null,
-                'name' => 'XYZ Solutions Pte Ltd',
-                'joined_date' => '20-06-2024',
-                'status' => 'Inactive',
-            ],
-        ];
-
-        $dummySubscribers = [
-            [
-                'id' => $realSwRecords[1]->hr_account_id ?? 'CU-001',
-                'software_handover_id' => $realSwRecords[1]->id ?? null,
-                'hr_account_id' => $realSwRecords[1]->hr_account_id ?? null,
-                'hr_company_id' => $realSwRecords[1]->hr_company_id ?? null,
-                'name' => 'Global Manufacturing Sdn Bhd',
-                'joined_date' => '10-03-2025',
-                'status' => 'Active',
-            ],
-            [
-                'id' => $realSwRecords[2]->hr_account_id ?? 'CU-002',
-                'software_handover_id' => $realSwRecords[2]->id ?? null,
-                'hr_account_id' => $realSwRecords[2]->hr_account_id ?? null,
-                'hr_company_id' => $realSwRecords[2]->hr_company_id ?? null,
-                'name' => 'Metro Services Pte Ltd',
-                'joined_date' => '05-08-2024',
-                'status' => 'Active',
-            ],
-            [
-                'id' => $realSwRecords[3]->hr_account_id ?? 'CU-003',
-                'software_handover_id' => $realSwRecords[3]->id ?? null,
-                'hr_account_id' => $realSwRecords[3]->hr_account_id ?? null,
-                'hr_company_id' => $realSwRecords[3]->hr_company_id ?? null,
-                'name' => 'Pinnacle Trading Co.',
-                'joined_date' => '22-11-2024',
-                'status' => 'Inactive',
-            ],
-        ];
-
-        $this->resellers = array_merge($this->resellers, $dummyResellers);
-        $this->subscribers = array_merge($this->subscribers, $dummySubscribers);
-
-        // Update badge counts to include dummy records
-        $this->resellerInactiveCount += 1;
-        $this->subscriberActiveCount += 2;
-        $this->subscriberInactiveCount += 1;
     }
 
     public function searchCustomers(): void

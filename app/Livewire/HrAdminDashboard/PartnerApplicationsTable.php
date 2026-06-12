@@ -3,8 +3,10 @@
 namespace App\Livewire\HrAdminDashboard;
 
 use App\Models\PartnerApplication;
+use App\Services\ResellerApprovalService;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
 use Filament\Tables\Actions\Action;
@@ -104,6 +106,7 @@ class PartnerApplicationsTable extends Component implements HasForms, HasTable
                     ->color('gray')
                     ->modalHeading('Application Detail')
                     ->modalWidth('3xl')
+                    ->slideOver()
                     ->modalSubmitAction(false)
                     ->modalCancelActionLabel('Close')
                     ->modalContent(fn (PartnerApplication $record): View => view(
@@ -117,22 +120,60 @@ class PartnerApplicationsTable extends Component implements HasForms, HasTable
                     ->color('success')
                     ->requiresConfirmation()
                     ->modalHeading('Approve application')
+                    ->modalDescription('This creates the reseller account and provisions a CRM trial database from the application modules and headcount.')
                     ->form([
+                        TextInput::make('buffer_months')
+                            ->label('Trial duration (months)')
+                            ->helperText('Length of the CRM trial/buffer license.')
+                            ->numeric()
+                            ->minValue(1)
+                            ->default(1)
+                            ->required(),
                         Textarea::make('review_remark')
                             ->label('Remark (optional)')
                             ->rows(3),
                     ])
                     ->action(function (PartnerApplication $record, array $data): void {
-                        $record->update([
-                            'status' => 'approved',
-                            'reviewed_at' => now(),
-                            'reviewed_by' => auth()->id(),
-                            'review_remark' => $data['review_remark'] ?? null,
-                        ]);
+                        try {
+                            $result = app(ResellerApprovalService::class)->approve(
+                                $record,
+                                (int) ($data['buffer_months'] ?? 1),
+                                $data['review_remark'] ?? null,
+                            );
+                        } catch (\Throwable $e) {
+                            Notification::make()
+                                ->title('Approval failed')
+                                ->body($e->getMessage())
+                                ->danger()
+                                ->persistent()
+                                ->send();
+
+                            return;
+                        }
+
+                        $reseller = $result['reseller'];
+
+                        if (! $result['dbProvisioned']) {
+                            Notification::make()
+                                ->title('Approved — reseller created, CRM DB pending')
+                                ->body("Reseller {$reseller->email} created and listed, but CRM database provisioning failed: {$result['dbError']}. You can retry the DB creation later.")
+                                ->warning()
+                                ->persistent()
+                                ->send();
+
+                            return;
+                        }
+
+                        $body = "Reseller {$reseller->email} created, listed, and CRM trial database provisioned.";
+                        if (! empty($result['crmPassword'])) {
+                            $body .= " The submitted password did not meet CRM complexity rules, so the CRM database login password is: {$result['crmPassword']}";
+                        }
 
                         Notification::make()
                             ->title('Application approved')
+                            ->body($body)
                             ->success()
+                            ->persistent()
                             ->send();
                     }),
 

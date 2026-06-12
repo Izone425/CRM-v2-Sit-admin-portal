@@ -52,6 +52,13 @@ class ResellerV2 extends Authenticatable
         'bypass_invoice',
         'reseller_commission',
         'advanced_modules',
+        'partner_application_id',
+        'modules',
+        'headcount',
+        'hr_account_id',
+        'hr_company_id',
+        'hr_user_id',
+        'crm_buffer_license_id',
     ];
 
     protected $hidden = [
@@ -65,7 +72,17 @@ class ResellerV2 extends Authenticatable
         'last_login_at' => 'datetime',
         'password' => 'hashed',
         'commission_rate' => 'decimal:2',
+        'modules' => 'array',
+        'headcount' => 'integer',
     ];
+
+    /**
+     * Get the partner application this reseller was created from (if any)
+     */
+    public function partnerApplication()
+    {
+        return $this->belongsTo(PartnerApplication::class, 'partner_application_id');
+    }
 
     /**
      * Get the leads associated with the reseller

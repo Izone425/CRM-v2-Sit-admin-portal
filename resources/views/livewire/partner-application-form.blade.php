@@ -1,14 +1,4 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>Become a TimeTec {{ $this->programLabel }} — TimeTec</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    @livewireStyles
-</head>
-<body class="min-h-screen py-12 px-4 bg-cover bg-center bg-no-repeat bg-fixed" style="background-image: url('/img/bg-login.jpg');">
+<div class="min-h-screen py-12 px-4 bg-cover bg-center bg-no-repeat bg-fixed" style="background-image: url('/img/bg-login.jpg');">
     <div class="max-w-3xl mx-auto">
         <div class="bg-white rounded-2xl shadow-lg p-8 sm:p-10">
             <div class="mb-8">
@@ -18,18 +8,19 @@
                 </p>
             </div>
 
-            @if (session('partner_submitted'))
+            @if ($submitted)
                 <div class="rounded-lg bg-green-50 border border-green-200 p-6">
                     <h2 class="text-base font-semibold text-green-900">Application received.</h2>
                     <p class="mt-2 text-sm text-green-800">
                         Thank you. We've recorded your application and our team will be in touch shortly.
                     </p>
-                    <a
-                        href="{{ route('partner.apply', ['partnerType' => $partner_type]) }}"
+                    <button
+                        type="button"
+                        wire:click="$set('submitted', false)"
                         class="mt-4 inline-flex items-center text-sm font-medium text-green-700 hover:text-green-900"
                     >
                         Submit another application
-                    </a>
+                    </button>
                 </div>
             @else
                 <form wire:submit.prevent="submit" class="space-y-10">
@@ -144,7 +135,7 @@
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
                             <div>
                                 <label class="block text-sm font-medium text-gray-800 mb-1">Email <span class="text-red-500">*</span></label>
-                                <input type="email" wire:model.defer="email" class="w-full rounded-lg border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 text-sm px-3 py-2 border">
+                                <input type="email" wire:model.blur="email" class="w-full rounded-lg border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 text-sm px-3 py-2 border">
                                 @error('email') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
                             </div>
 
@@ -259,6 +250,9 @@
                     </section>
 
                     <div>
+                        @error('submit')
+                            <p class="mb-3 text-sm text-red-600">{{ $message }}</p>
+                        @enderror
                         <button type="submit"
                                 class="w-full sm:w-auto inline-flex justify-center items-center rounded-lg bg-indigo-600 px-6 py-3 text-sm font-semibold text-white shadow hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-60"
                                 wire:loading.attr="disabled">
@@ -274,6 +268,4 @@
             &copy; {{ date('Y') }} TimeTec. All rights reserved.
         </p>
     </div>
-    @livewireScripts
-</body>
-</html>
+</div>

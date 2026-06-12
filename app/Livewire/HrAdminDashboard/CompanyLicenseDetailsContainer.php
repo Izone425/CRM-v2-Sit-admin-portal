@@ -114,12 +114,36 @@ class CompanyLicenseDetailsContainer extends Component
             })->first();
         }
 
-        // Lookup ResellerV2 via the shared reseller_id
+        // Lookup ResellerV2 via the shared reseller_id (Subscriber path).
+        // For reseller licenses (no software handover) fall back to looking up
+        // ResellerV2 by CRM IDs, or by parsing the RSL_xxxxxx handover_id pattern.
         $resellerV2 = null;
         if ($softwareHandover && $softwareHandover->reseller_id) {
             $resellerV2 = ResellerV2::with('commission')
                 ->where('reseller_id', $softwareHandover->reseller_id)
                 ->first();
+        } elseif (
+            ($this->hrAccountId !== null && $this->hrCompanyId !== null)
+            || ($this->handoverId && str_starts_with($this->handoverId, 'RSL_'))
+        ) {
+            if ($this->hrAccountId !== null && $this->hrCompanyId !== null) {
+                $resellerV2 = ResellerV2::with('commission')
+                    ->where('hr_account_id', $this->hrAccountId)
+                    ->where('hr_company_id', $this->hrCompanyId)
+                    ->first();
+            }
+
+            if (! $resellerV2 && $this->handoverId && str_starts_with($this->handoverId, 'RSL_')) {
+                $resellerId = (int) ltrim(substr($this->handoverId, 4), '0');
+                $resellerV2 = ResellerV2::with('commission')->find($resellerId);
+            }
+
+            // Backfill the CRM IDs onto the component so downstream code
+            // (CRM API tabs, etc.) can pick them up the same as for Subscriber.
+            if ($resellerV2) {
+                $this->hrAccountId = $this->hrAccountId ?? $resellerV2->hr_account_id;
+                $this->hrCompanyId = $this->hrCompanyId ?? $resellerV2->hr_company_id;
+            }
         }
 
         // Build upline info for Reseller/Subscriber companies
@@ -193,7 +217,7 @@ class CompanyLicenseDetailsContainer extends Component
             'handover_id' => $this->handoverId ?? $hrLicense?->handover_id,
             'hr_account_id' => $resolvedAccountId,
             'hr_company_id' => $resolvedCompanyId,
-            'hr_user_id' => $softwareHandover?->hr_user_id,
+            'hr_user_id' => $softwareHandover?->hr_user_id ?? $resellerV2?->hr_user_id,
             'license_category' => $hrLicense?->license_category ?? 'Subscriber',
             'reseller_v2' => $resellerV2,
             'upline_info' => $uplineInfo,

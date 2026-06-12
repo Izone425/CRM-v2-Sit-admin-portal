@@ -8,6 +8,7 @@ use App\Models\PartnerApplication;
 use App\Models\StateCode;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Livewire\Component;
 
@@ -53,6 +54,8 @@ class PartnerApplicationForm extends Component
     public Collection $stateOptions;
     public Collection $industryOptions;
 
+    public bool $submitted = false;
+
     public function mount(string $partnerType): void
     {
         $this->partner_type = $partnerType;
@@ -65,6 +68,11 @@ class PartnerApplicationForm extends Component
     public function getProgramLabelProperty(): string
     {
         return $this->partner_type === 'distributor' ? 'Distributor' : 'Reseller';
+    }
+
+    public function updatedEmail(): void
+    {
+        $this->validateOnly('email');
     }
 
     private function safePluck(string $table, \Closure $resolver): Collection
@@ -123,43 +131,76 @@ class PartnerApplicationForm extends Component
         ];
     }
 
-    public function submit()
+    public function submit(): void
     {
-        $data = $this->validate();
-
-        PartnerApplication::create([
+        Log::info('Partner application submit() entered', [
             'partner_type' => $this->partner_type,
-            'categories' => $data['categories'],
-            'headcount' => $data['headcount'],
-            'company_name' => $data['company_name'],
-            'address' => $data['address'],
-            'state' => $data['state'],
-            'postcode' => $data['postcode'],
-            'country' => $data['country'],
-            'telephone' => $data['telephone'],
-            'company_website' => $data['company_website'],
-            'business_type' => $data['business_type'],
-            'industry' => $data['industry'],
-            'years_in_business' => $data['years_in_business'],
-            'email' => $data['email'],
-            'password' => Hash::make($data['password']),
-            'mobile_phone' => $data['mobile_phone'],
-            'first_name' => $data['first_name'],
-            'last_name' => $data['last_name'],
-            'designation' => $data['designation'],
-            'existing_fingertec_reseller' => (bool) $data['existing_fingertec_reseller'],
-            'consent_setup_permission' => true,
-            'consent_marketing' => (bool) $this->consent_marketing,
-            'status' => 'pending',
+            'email' => $this->email,
+            'has_categories' => count($this->categories),
+            'has_headcount' => $this->headcount,
         ]);
 
-        return redirect()
-            ->route('partner.apply', ['partnerType' => $this->partner_type])
-            ->with('partner_submitted', true);
+        $data = $this->validate();
+
+        try {
+            $application = PartnerApplication::create([
+                'partner_type' => $this->partner_type,
+                'categories' => $data['categories'],
+                'headcount' => $data['headcount'],
+                'company_name' => $data['company_name'],
+                'address' => $data['address'],
+                'state' => $data['state'],
+                'postcode' => $data['postcode'],
+                'country' => $data['country'],
+                'telephone' => $data['telephone'],
+                'company_website' => $data['company_website'],
+                'business_type' => $data['business_type'],
+                'industry' => $data['industry'],
+                'years_in_business' => $data['years_in_business'],
+                'email' => $data['email'],
+                'password' => Hash::make($data['password']),
+                'mobile_phone' => $data['mobile_phone'],
+                'first_name' => $data['first_name'],
+                'last_name' => $data['last_name'],
+                'designation' => $data['designation'],
+                'existing_fingertec_reseller' => (bool) $data['existing_fingertec_reseller'],
+                'consent_setup_permission' => true,
+                'consent_marketing' => (bool) $this->consent_marketing,
+                'status' => 'pending',
+            ]);
+
+            Log::info('Partner application created', [
+                'id' => $application->id,
+                'partner_type' => $application->partner_type,
+                'email' => $application->email,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Partner application submit failed', [
+                'partner_type' => $this->partner_type,
+                'email' => $this->email,
+                'error' => $e->getMessage(),
+                'trace' => substr($e->getTraceAsString(), 0, 2000),
+            ]);
+
+            $this->addError('submit', 'Sorry, something went wrong saving your application. Please try again or contact us.');
+            return;
+        }
+
+        $this->reset([
+            'company_name', 'address', 'state', 'postcode', 'country',
+            'telephone', 'company_website', 'business_type', 'industry', 'years_in_business',
+            'email', 'password', 'password_confirmation', 'mobile_phone',
+            'first_name', 'last_name', 'designation', 'existing_fingertec_reseller',
+            'consent_setup_permission', 'consent_marketing',
+            'categories', 'headcount',
+        ]);
+
+        $this->submitted = true;
     }
 
     public function render()
     {
-        return view('livewire.partner-application-form');
+        return view('livewire.partner-application-form')
+            ->layoutData(['title' => 'Become a TimeTec ' . $this->programLabel . ' — TimeTec']);
     }
 }

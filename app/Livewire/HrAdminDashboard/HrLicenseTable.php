@@ -18,6 +18,7 @@ use Illuminate\View\View;
 use Livewire\Component;
 use Livewire\Attributes\On;
 use App\Models\HrLicense;
+use App\Models\ResellerV2;
 use App\Models\SoftwareHandover;
 
 class HrLicenseTable extends Component implements HasForms, HasTable
@@ -80,6 +81,36 @@ class HrLicenseTable extends Component implements HasForms, HasTable
         return HrLicense::query()
             ->where('license_category', 'Subscriber')
             ->count();
+    }
+
+    /**
+     * Build the Company License Details URL for both Subscriber and Reseller rows.
+     *
+     * Subscriber rows resolve hrAccountId/hrCompanyId via the linked SoftwareHandover.
+     * Reseller rows (handover_id starts with `RSL_`) resolve them by parsing the
+     * reseller id out of the handover_id and looking up ResellerV2 directly.
+     * The handover_id itself is also passed so the destination page can re-derive
+     * the HrLicense row.
+     */
+    protected function buildCompanyDetailsUrl(HrLicense $record): string
+    {
+        $hrAccountId = $record->softwareHandover?->hr_account_id;
+        $hrCompanyId = $record->softwareHandover?->hr_company_id;
+
+        if (($hrAccountId === null || $hrCompanyId === null)
+            && str_starts_with((string) $record->handover_id, 'RSL_')
+        ) {
+            $resellerId = (int) ltrim(substr($record->handover_id, 4), '0');
+            $reseller = ResellerV2::find($resellerId);
+            $hrAccountId = $hrAccountId ?? $reseller?->hr_account_id;
+            $hrCompanyId = $hrCompanyId ?? $reseller?->hr_company_id;
+        }
+
+        return url('/admin/hr-company-license-details?' . http_build_query([
+            'handoverId' => $record->handover_id,
+            'hrAccountId' => $hrAccountId,
+            'hrCompanyId' => $hrCompanyId,
+        ]));
     }
 
     public function table(Table $table): Table
@@ -200,10 +231,7 @@ class HrLicenseTable extends Component implements HasForms, HasTable
                     ->tooltip(fn ($record) => $record->company_name)
                     ->color('primary')
                     ->toggleable()
-                    ->url(fn (HrLicense $record) => url("/admin/hr-company-license-details?" . http_build_query([
-                        'hrAccountId' => $record->softwareHandover?->hr_account_id,
-                        'hrCompanyId' => $record->softwareHandover?->hr_company_id,
-                    ]))),
+                    ->url(fn (HrLicense $record) => $this->buildCompanyDetailsUrl($record)),
 
                 TextColumn::make('license_category')
                     ->label('Category')

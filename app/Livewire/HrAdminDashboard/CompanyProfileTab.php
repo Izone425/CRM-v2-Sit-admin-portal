@@ -95,6 +95,7 @@ class CompanyProfileTab extends Component
     {
         $softwareHandover = $this->companyData['software_handover'] ?? null;
         $companyDetail = $this->companyData['company_detail'] ?? null;
+        $resellerV2 = $this->companyData['reseller_v2'] ?? null;
 
         // Load License Certificate if available
         $licenseCertificate = null;
@@ -104,9 +105,18 @@ class CompanyProfileTab extends Component
 
         $this->profileData = [
             'account_info' => [
-                'branch' => $softwareHandover?->company_name ?? $this->companyData['company_name'] ?? '-',
-                'register_date' => $softwareHandover?->completed_at ? Carbon::parse($softwareHandover->completed_at)->format('d-m-Y H:i:s') : '-',
-                'last_login_date' => '-', // From HR Backend API
+                'branch' => $softwareHandover?->company_name
+                    ?? $resellerV2?->company_name
+                    ?? $this->companyData['company_name']
+                    ?? '-',
+                'register_date' => $softwareHandover?->completed_at
+                    ? Carbon::parse($softwareHandover->completed_at)->format('d-m-Y H:i:s')
+                    : ($resellerV2?->created_at
+                        ? Carbon::parse($resellerV2->created_at)->format('d-m-Y H:i:s')
+                        : '-'),
+                'last_login_date' => $resellerV2?->last_login_at
+                    ? Carbon::parse($resellerV2->last_login_at)->format('d-m-Y H:i:s')
+                    : '-',
             ],
             'backend_info' => [
                 'company_id' => $this->companyData['hr_company_id'] ?? '-',
@@ -114,14 +124,19 @@ class CompanyProfileTab extends Component
                 'webster_ip' => '-', // From HR Backend API
             ],
             'billing_info' => [
-                'company_name' => $companyDetail?->company_name ?? $this->companyData['company_name'] ?? '-',
-                'address' => $this->formatAddress($companyDetail),
-                'email' => $companyDetail?->email ?? '-',
+                'company_name' => $companyDetail?->company_name
+                    ?? $resellerV2?->company_name
+                    ?? $this->companyData['company_name']
+                    ?? '-',
+                'address' => $this->formatAddress($companyDetail) !== '-'
+                    ? $this->formatAddress($companyDetail)
+                    : ($resellerV2?->address ?? '-'),
+                'email' => $companyDetail?->email ?? $resellerV2?->email ?? '-',
             ],
             'contact_person' => [
-                'name' => $companyDetail?->name ?? '-',
-                'email' => $companyDetail?->email ?? '-',
-                'phone' => $companyDetail?->contact_no ?? '-',
+                'name' => $companyDetail?->name ?? $resellerV2?->name ?? '-',
+                'email' => $companyDetail?->email ?? $resellerV2?->email ?? '-',
+                'phone' => $companyDetail?->contact_no ?? $resellerV2?->phone ?? '-',
                 'position' => $companyDetail?->position ?? '-',
                 'title' => '-',
                 'nationality' => '-',
@@ -149,11 +164,15 @@ class CompanyProfileTab extends Component
     protected function loadBillingInfo(): void
     {
         $companyDetail = $this->companyData['company_detail'] ?? null;
+        $resellerV2 = $this->companyData['reseller_v2'] ?? null;
 
-        $this->billingCompanyName = $companyDetail?->company_name ?? $this->companyData['company_name'] ?? null;
-        $this->billingPicName = $companyDetail?->name ?? null;
-        $this->billingPhone = $companyDetail?->contact_no ?? null;
-        $this->billingEmail = $companyDetail?->email ?? 'billing@abctechnology.com';
+        $this->billingCompanyName = $companyDetail?->company_name
+            ?? $resellerV2?->company_name
+            ?? $this->companyData['company_name']
+            ?? null;
+        $this->billingPicName = $companyDetail?->name ?? $resellerV2?->name ?? null;
+        $this->billingPhone = $companyDetail?->contact_no ?? $resellerV2?->phone ?? null;
+        $this->billingEmail = $companyDetail?->email ?? $resellerV2?->email ?? 'billing@abctechnology.com';
     }
 
     protected function loadContactPerson(): void
@@ -451,21 +470,43 @@ class CompanyProfileTab extends Component
     protected function loadCustomerCredential(): void
     {
         $softwareHandover = $this->companyData['software_handover'] ?? null;
+        $resellerV2 = $this->companyData['reseller_v2'] ?? null;
 
-        if (!$softwareHandover) {
+        if ($softwareHandover) {
+            $this->credentialCreatedAt = $softwareHandover->completed_at
+                ? Carbon::parse($softwareHandover->completed_at)->format('Y-m-d H:i:s')
+                : null;
+            $this->credentialSalesPerson = $softwareHandover->salesperson;
+
+            $customer = Customer::where('sw_id', $softwareHandover->id)->first();
+
+            $this->credentialMasterEmail = $customer?->email ?? "sw{$softwareHandover->id}@timeteccloud.com";
+            $this->credentialPassword = $customer?->plain_password ?? 'N/A';
+            $this->credentialStatus = $customer?->status ?? null;
             return;
         }
 
-        $this->credentialCreatedAt = $softwareHandover->completed_at
-            ? Carbon::parse($softwareHandover->completed_at)->format('Y-m-d H:i:s')
-            : null;
-        $this->credentialSalesPerson = $softwareHandover->salesperson;
+        // Reseller fallback — derive the credential view from the ResellerV2
+        // row created by the approval flow. Sales Person is the approving
+        // admin (partner_applications.reviewed_by → User name).
+        if ($resellerV2) {
+            $this->credentialCreatedAt = $resellerV2->created_at
+                ? Carbon::parse($resellerV2->created_at)->format('Y-m-d H:i:s')
+                : null;
 
-        $customer = Customer::where('sw_id', $softwareHandover->id)->first();
+            $salesPerson = null;
+            $partnerApp = $resellerV2->partner_application_id
+                ? \App\Models\PartnerApplication::with('reviewer')->find($resellerV2->partner_application_id)
+                : null;
+            if ($partnerApp?->reviewer) {
+                $salesPerson = $partnerApp->reviewer->name;
+            }
+            $this->credentialSalesPerson = $salesPerson;
 
-        $this->credentialMasterEmail = $customer?->email ?? "sw{$softwareHandover->id}@timeteccloud.com";
-        $this->credentialPassword = $customer?->plain_password ?? 'N/A';
-        $this->credentialStatus = $customer?->status ?? null;
+            $this->credentialMasterEmail = $resellerV2->email;
+            $this->credentialPassword = $resellerV2->plain_password ?: 'N/A';
+            $this->credentialStatus = $resellerV2->status;
+        }
     }
 
     public function render()
