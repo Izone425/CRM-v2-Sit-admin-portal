@@ -44,21 +44,27 @@ class CompanyCustomerTab extends Component
     public function loadCustomers(): void
     {
         $softwareHandover = $this->companyData['software_handover'] ?? null;
+        $resellerV2 = $this->companyData['reseller_v2'] ?? null;
 
-        if (!$softwareHandover || !$softwareHandover->reseller_id) {
+        // Subscriber view: use the dealer assigned to the current handover.
+        // Reseller view: no SoftwareHandover exists — fall back to the local
+        // resellers.id linked from the reseller_v2 row.
+        $resellerId = $softwareHandover?->reseller_id ?? $resellerV2?->reseller_id;
+        $currentSwId = $softwareHandover?->id;
+
+        if (!$resellerId) {
             $this->resellers = [];
             $this->subscribers = [];
             return;
         }
 
-        $resellerId = $softwareHandover->reseller_id;
-        $currentSwId = $softwareHandover->id;
-
         try {
             // Build query for all HrLicense records under this reseller (excluding current company)
             $query = HrLicense::whereHas('softwareHandover', function ($q) use ($resellerId, $currentSwId) {
-                $q->where('reseller_id', $resellerId)
-                  ->where('id', '!=', $currentSwId);
+                $q->where('reseller_id', $resellerId);
+                if ($currentSwId !== null) {
+                    $q->where('id', '!=', $currentSwId);
+                }
             })
                         ->with('softwareHandover:id,hr_account_id,hr_company_id,completed_at,status');
 
@@ -92,34 +98,36 @@ class CompanyCustomerTab extends Component
             $resellerRecords = $allLicenses->where('license_category', 'Reseller');
             $subscriberRecords = $allLicenses->where('license_category', 'Subscriber');
 
-            // Map to display arrays
-            $this->resellers = $resellerRecords->map(function ($license) {
-                return [
-                    'id' => $license->softwareHandover?->hr_account_id ?? '-',
-                    'software_handover_id' => $license->software_handover_id,
-                    'hr_account_id' => $license->softwareHandover?->hr_account_id,
-                    'hr_company_id' => $license->softwareHandover?->hr_company_id,
-                    'name' => $license->company_name ?? '-',
-                    'joined_date' => $license->softwareHandover?->completed_at
-                        ? Carbon::parse($license->softwareHandover->completed_at)->format('d-m-Y')
-                        : '-',
-                    'status' => $license->status ?? 'Inactive',
-                ];
-            })->values()->toArray();
+            // Collapse multiple HrLicense rows into ONE display row per customer
+            // (keyed by software_handover_id). The customer is "Active" if ANY
+            // of its licenses is currently Enabled; otherwise Inactive.
+            // Normalises hr_licenses' Enabled/Disabled vocabulary into the
+            // view's expected 'active'/'inactive' badge styling check.
+            $buildDisplay = function ($licenses) {
+                return $licenses
+                    ->groupBy('software_handover_id')
+                    ->map(function ($group) {
+                        $first = $group->first();
+                        $sw = $first->softwareHandover;
+                        $anyEnabled = $group->contains(fn ($l) => strtolower((string) $l->status) === 'enabled');
+                        return [
+                            'id' => $sw?->hr_account_id ?? '-',
+                            'software_handover_id' => $first->software_handover_id,
+                            'hr_account_id' => $sw?->hr_account_id,
+                            'hr_company_id' => $sw?->hr_company_id,
+                            'name' => $first->company_name ?? '-',
+                            'joined_date' => $sw?->completed_at
+                                ? Carbon::parse($sw->completed_at)->format('d-m-Y')
+                                : '-',
+                            'status' => $anyEnabled ? 'Active' : 'Inactive',
+                        ];
+                    })
+                    ->values()
+                    ->toArray();
+            };
 
-            $this->subscribers = $subscriberRecords->map(function ($license) {
-                return [
-                    'id' => $license->softwareHandover?->hr_account_id ?? '-',
-                    'software_handover_id' => $license->software_handover_id,
-                    'hr_account_id' => $license->softwareHandover?->hr_account_id,
-                    'hr_company_id' => $license->softwareHandover?->hr_company_id,
-                    'name' => $license->company_name ?? '-',
-                    'joined_date' => $license->softwareHandover?->completed_at
-                        ? Carbon::parse($license->softwareHandover->completed_at)->format('d-m-Y')
-                        : '-',
-                    'status' => $license->status ?? 'Inactive',
-                ];
-            })->values()->toArray();
+            $this->resellers = $buildDisplay($resellerRecords);
+            $this->subscribers = $buildDisplay($subscriberRecords);
 
             // Compute unfiltered counts for badges
             $this->computeCounts($resellerId, $currentSwId);
@@ -134,28 +142,32 @@ class CompanyCustomerTab extends Component
         }
     }
 
-    protected function computeCounts(int $resellerId, int $currentSwId): void
+    protected function computeCounts(int $resellerId, ?int $currentSwId): void
     {
-        $counts = HrLicense::whereHas('softwareHandover', function ($q) use ($resellerId, $currentSwId) {
-            $q->where('reseller_id', $resellerId)
-              ->where('id', '!=', $currentSwId);
+        // Count DISTINCT customers (software_handover_id + license_category
+        // bucket), not raw HrLicense rows. A customer counts as "Active" if
+        // any of its licenses is currently Enabled. This matches the dedupe
+        // logic in loadCustomers() and the view's Active/Inactive semantics.
+        $rows = HrLicense::whereHas('softwareHandover', function ($q) use ($resellerId, $currentSwId) {
+            $q->where('reseller_id', $resellerId);
+            if ($currentSwId !== null) {
+                $q->where('id', '!=', $currentSwId);
+            }
         })
-        ->selectRaw("
-            license_category,
-            SUM(CASE WHEN LOWER(status) = 'active' THEN 1 ELSE 0 END) as active_count,
-            SUM(CASE WHEN LOWER(status) != 'active' THEN 1 ELSE 0 END) as inactive_count
-        ")
-        ->groupBy('license_category')
-        ->get()
-        ->keyBy('license_category');
+        ->select('software_handover_id', 'license_category', 'status')
+        ->get();
 
-        $resellerCounts = $counts->get('Reseller');
-        $subscriberCounts = $counts->get('Subscriber');
+        $perCustomer = $rows
+            ->groupBy(fn ($r) => $r->software_handover_id . '|' . $r->license_category)
+            ->map(fn ($group) => [
+                'license_category' => $group->first()->license_category,
+                'enabled' => $group->contains(fn ($r) => strtolower((string) $r->status) === 'enabled'),
+            ]);
 
-        $this->resellerActiveCount = (int) ($resellerCounts->active_count ?? 0);
-        $this->resellerInactiveCount = (int) ($resellerCounts->inactive_count ?? 0);
-        $this->subscriberActiveCount = (int) ($subscriberCounts->active_count ?? 0);
-        $this->subscriberInactiveCount = (int) ($subscriberCounts->inactive_count ?? 0);
+        $this->resellerActiveCount     = $perCustomer->where('license_category', 'Reseller')->where('enabled', true)->count();
+        $this->resellerInactiveCount   = $perCustomer->where('license_category', 'Reseller')->where('enabled', false)->count();
+        $this->subscriberActiveCount   = $perCustomer->where('license_category', 'Subscriber')->where('enabled', true)->count();
+        $this->subscriberInactiveCount = $perCustomer->where('license_category', 'Subscriber')->where('enabled', false)->count();
     }
 
     public function searchCustomers(): void

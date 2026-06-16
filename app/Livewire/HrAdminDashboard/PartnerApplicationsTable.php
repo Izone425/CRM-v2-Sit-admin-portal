@@ -164,10 +164,10 @@ class PartnerApplicationsTable extends Component implements HasForms, HasTable
                             return;
                         }
 
-                        $body = "Reseller {$reseller->email} created, listed, and CRM trial database provisioned.";
-                        if (! empty($result['crmPassword'])) {
-                            $body .= " The submitted password did not meet CRM complexity rules, so the CRM database login password is: {$result['crmPassword']}";
-                        }
+                        $body = "Reseller {$reseller->email} created, listed, and CRM trial database provisioned."
+                            . " HR-v2 Account ID: {$result['accountId']}"
+                            . " | Company ID: {$result['companyId']}"
+                            . " | CRM login password: {$result['crmPassword']}";
 
                         Notification::make()
                             ->title('Application approved')

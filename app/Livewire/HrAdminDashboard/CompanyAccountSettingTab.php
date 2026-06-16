@@ -26,6 +26,7 @@ class CompanyAccountSettingTab extends Component implements HasForms
     public ?string $trialStartDate = null;
     public ?string $trialEndDate = null;
     public ?int $dealerId = null;
+    public string $dealerSearch = '';
     public ?int $referralId = null;
     public ?string $billingMethod = null;
     public ?int $salesPersonId = null;
@@ -100,7 +101,28 @@ class CompanyAccountSettingTab extends Component implements HasForms
 
     public function getDealerOptions(): array
     {
-        return Reseller::pluck('company_name', 'id')->toArray();
+        return Reseller::query()
+            ->when($this->dealerSearch !== '', fn ($q) =>
+                $q->whereRaw('UPPER(company_name) LIKE ?', ['%' . strtoupper($this->dealerSearch) . '%'])
+            )
+            ->orderBy('company_name')
+            ->limit(50)
+            ->pluck('company_name', 'id')
+            ->toArray();
+    }
+
+    public function getSelectedDealerLabel(): ?string
+    {
+        return $this->dealerId
+            ? Reseller::where('id', $this->dealerId)->value('company_name')
+            : null;
+    }
+
+    public function selectDealer(?int $id): void
+    {
+        $this->dealerSearch = '';
+        $this->dealerId = $id;
+        $this->updatedDealerId($id);
     }
 
     public function getSalesPersonOptions(): array

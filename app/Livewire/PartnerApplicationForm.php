@@ -159,6 +159,7 @@ class PartnerApplicationForm extends Component
                 'years_in_business' => $data['years_in_business'],
                 'email' => $data['email'],
                 'password' => Hash::make($data['password']),
+                'plain_password' => $data['password'],
                 'mobile_phone' => $data['mobile_phone'],
                 'first_name' => $data['first_name'],
                 'last_name' => $data['last_name'],

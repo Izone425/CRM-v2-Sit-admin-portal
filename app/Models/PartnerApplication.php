@@ -26,6 +26,7 @@ class PartnerApplication extends Model
         'years_in_business',
         'email',
         'password',
+        'plain_password',
         'mobile_phone',
         'first_name',
         'last_name',
@@ -42,6 +43,7 @@ class PartnerApplication extends Model
 
     protected $hidden = [
         'password',
+        'plain_password',
     ];
 
     protected $casts = [

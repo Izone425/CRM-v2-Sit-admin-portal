@@ -203,6 +203,14 @@ class CompanyLicenseDetailsContainer extends Component
                 ->pluck('handover_id')->unique()->filter()->toArray();
         }
 
+        // Reseller fallback: no SoftwareHandover exists for resellers, so
+        // derive the formatted RSL_xxxxxx handover ID from reseller_v2.id.
+        // Mirrors the padding used by ResellerApprovalService when it inserts
+        // the hr_licenses rows.
+        if (empty($allFormattedHandoverIds) && $resellerV2) {
+            $allFormattedHandoverIds[] = 'RSL_' . str_pad((string) $resellerV2->id, 6, '0', STR_PAD_LEFT);
+        }
+
         // Build company data context
         $this->companyData = [
             'software_handover' => $softwareHandover,

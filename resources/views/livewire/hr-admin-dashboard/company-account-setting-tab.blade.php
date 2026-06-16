@@ -60,12 +60,47 @@
         </div>
         <div class="mb-4">
             <label class="block text-sm font-medium text-gray-700 mb-1">Dealer/Distributor</label>
-            <select wire:model.live="dealerId" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
-                <option value="">Select Dealer/Distributor</option>
-                @foreach($this->getDealerOptions() as $id => $name)
-                    <option value="{{ $id }}">{{ $name }}</option>
-                @endforeach
-            </select>
+            <div x-data="{ open: false }" @click.outside="open = false" class="relative">
+                <button type="button" @click="open = !open"
+                        class="w-full text-left px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-white flex justify-between items-center focus:ring-blue-500 focus:border-blue-500">
+                    <span class="{{ $this->getSelectedDealerLabel() ? 'text-gray-900' : 'text-gray-400' }}">
+                        {{ $this->getSelectedDealerLabel() ?? 'Select Dealer/Distributor' }}
+                    </span>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </button>
+                <div x-show="open" x-cloak x-transition class="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-lg">
+                    <input type="text"
+                           wire:model.live.debounce.150ms="dealerSearch"
+                           placeholder="Search by name..."
+                           class="w-full px-3 py-2 border-b border-gray-200 focus:outline-none focus:ring-0 focus:border-blue-500 text-sm" />
+                    <ul class="max-h-64 overflow-y-auto">
+                        @if($dealerId)
+                            <li>
+                                <button type="button"
+                                        wire:click="selectDealer(null)"
+                                        @click="open = false"
+                                        class="w-full text-left px-3 py-2 hover:bg-gray-100 text-sm text-gray-500 italic">
+                                    — Clear selection —
+                                </button>
+                            </li>
+                        @endif
+                        @forelse($this->getDealerOptions() as $id => $name)
+                            <li>
+                                <button type="button"
+                                        wire:click="selectDealer({{ $id }})"
+                                        @click="open = false"
+                                        class="w-full text-left px-3 py-2 hover:bg-gray-100 text-sm {{ $dealerId === $id ? 'bg-blue-50 font-medium' : '' }}">
+                                    {{ $name }}
+                                </button>
+                            </li>
+                        @empty
+                            <li class="px-3 py-2 text-sm text-gray-500">No matches</li>
+                        @endforelse
+                    </ul>
+                </div>
+            </div>
         </div>
 
         {{-- Billing Method --}}

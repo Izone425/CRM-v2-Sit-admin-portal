@@ -146,21 +146,7 @@ class CustomerActivationController extends Controller
 
     private function generateRandomPassword($length = 12)
     {
-        $characters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%&*';
-        $password = '';
-
-        // Ensure password has at least one uppercase, one lowercase, one digit, and one special character
-        $password .= $characters[rand(26, 51)]; // Uppercase
-        $password .= $characters[rand(0, 25)];  // Lowercase
-        $password .= $characters[rand(52, 61)]; // Digit
-        $password .= $characters[rand(62, strlen($characters) - 1)]; // Special character
-
-        // Fill the rest randomly
-        for ($i = 4; $i < $length; $i++) {
-            $password .= $characters[rand(0, strlen($characters) - 1)];
-        }
-
-        return str_shuffle($password);
+        return app(\App\Services\PasswordGeneratorService::class)->generate($length);
     }
 
     // Remove the old activation methods as they're no longer needed

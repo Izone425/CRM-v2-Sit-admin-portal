@@ -95,6 +95,10 @@
             </h4>
             <div class="space-y-3">
                 <div class="flex justify-between">
+                    <span class="text-sm text-gray-600">Backend Account Id</span>
+                    <span class="text-sm font-medium text-gray-900">{{ $profileData['backend_info']['account_id'] }}</span>
+                </div>
+                <div class="flex justify-between">
                     <span class="text-sm text-gray-600">Backend Company Id</span>
                     <span class="text-sm font-medium text-gray-900">{{ $profileData['backend_info']['company_id'] }}</span>
                 </div>
@@ -211,6 +215,10 @@
                 <div class="flex justify-between">
                     <span class="text-sm text-gray-600">Master Email</span>
                     <span class="text-sm font-medium text-gray-900">{{ $credentialMasterEmail ?? '-' }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-sm text-gray-600">Account ID</span>
+                    <span class="text-sm font-medium text-gray-900">{{ $credentialAccountId ?? '-' }}</span>
                 </div>
                 <div class="flex justify-between">
                     <span class="text-sm text-gray-600">Password</span>

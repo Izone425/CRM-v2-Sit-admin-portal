@@ -151,7 +151,8 @@ class CompanyProductsTab extends Component
             $allHandoverIds = [$softwareHandover->id];
         }
 
-        if (empty($allHandoverIds)) return;
+        $allFormattedHandoverIds = $this->companyData['all_formatted_handover_ids'] ?? [];
+        if (empty($allHandoverIds) && empty($allFormattedHandoverIds)) return;
 
         // Load all handovers and resolve PI references
         $handovers = \App\Models\SoftwareHandover::whereIn('id', $allHandoverIds)

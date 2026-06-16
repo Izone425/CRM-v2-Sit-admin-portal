@@ -76,6 +76,7 @@ class CompanyProfileTab extends Component
     public ?string $credentialCreatedAt = null;
     public ?string $credentialSalesPerson = null;
     public ?string $credentialMasterEmail = null;
+    public ?string $credentialAccountId = null;
     public ?string $credentialPassword = null;
     public ?string $credentialStatus = null;
 
@@ -119,6 +120,7 @@ class CompanyProfileTab extends Component
                     : '-',
             ],
             'backend_info' => [
+                'account_id' => $this->companyData['hr_account_id'] ?? '-',
                 'company_id' => $this->companyData['hr_company_id'] ?? '-',
                 'user_id' => $this->companyData['hr_user_id'] ?? '-',
                 'webster_ip' => '-', // From HR Backend API
@@ -481,6 +483,9 @@ class CompanyProfileTab extends Component
             $customer = Customer::where('sw_id', $softwareHandover->id)->first();
 
             $this->credentialMasterEmail = $customer?->email ?? "sw{$softwareHandover->id}@timeteccloud.com";
+            $this->credentialAccountId = $customer?->hr_account_id
+                ?? $softwareHandover?->hr_account_id
+                ?? null;
             $this->credentialPassword = $customer?->plain_password ?? 'N/A';
             $this->credentialStatus = $customer?->status ?? null;
             return;
@@ -504,6 +509,7 @@ class CompanyProfileTab extends Component
             $this->credentialSalesPerson = $salesPerson;
 
             $this->credentialMasterEmail = $resellerV2->email;
+            $this->credentialAccountId = $resellerV2->hr_account_id;
             $this->credentialPassword = $resellerV2->plain_password ?: 'N/A';
             $this->credentialStatus = $resellerV2->status;
         }

@@ -61,14 +61,18 @@ class ResellerApprovalService
 
         // 2. CRM succeeded — persist all local state in a single transaction with the CRM IDs in hand.
         $reseller = DB::transaction(function () use ($application, $remark, $email, $bufferMonths, $crm) {
+            // Capture the typed plaintext BEFORE the update clears it.
+            $plainPassword = (string) ($application->plain_password ?? Str::random(12));
+
             $application->update([
                 'status' => 'approved',
                 'reviewed_at' => now(),
                 'reviewed_by' => auth()->id(),
                 'review_remark' => $remark,
+                // Clear the plaintext forwarding column once we're persisting
+                // the reseller — shrinks the at-rest plaintext window.
+                'plain_password' => null,
             ]);
-
-            $plainPassword = (string) ($application->password ?? Str::random(12));
             $name = trim(($application->first_name ?? '') . ' ' . ($application->last_name ?? ''))
                 ?: ($application->company_name ?? 'Reseller');
 
@@ -78,8 +82,9 @@ class ResellerApprovalService
                 'phone' => $application->mobile_phone,
                 'email' => $email,
                 'password' => Hash::make($plainPassword),
-                'plain_password' => $plainPassword,
-                'reseller_id' => $this->resolveResellerId($application->company_name),
+                'plain_password' => $crm['crmPasswordGenerated'],
+                'reseller_id' => $this->resolveResellerId($application->company_name)
+                    ?? $this->ensureLocalResellerRow($application->company_name),
                 'partner_application_id' => $application->id,
                 'modules' => $application->categories ?? [],
                 'headcount' => $application->headcount,
@@ -105,29 +110,37 @@ class ResellerApprovalService
                 'crm_buffer_license_id' => $crm['licenseSetId'],
             ]);
 
-            // Local All-Licenses-page row so the reseller's buffer license is
-            // visible at /admin/hr-license filtered by Category=Reseller.
-            // Mirrors the Subscriber pattern in SoftwareHandoverExportController.
-            HrLicense::updateOrCreate(
-                ['handover_id' => 'RSL_' . str_pad((string) $reseller->id, 6, '0', STR_PAD_LEFT)],
-                [
-                    'software_handover_id' => null,
-                    'type' => 'TRIAL',
-                    'company_name' => $reseller->company_name,
-                    'license_category' => 'Reseller',
-                    'license_type' => 'TimeTec (' . implode(', ', $crm['applications']) . ') (Trial)',
-                    'unit' => (int) ($application->headcount ?? 0),
-                    'user_limit' => (int) ($application->headcount ?? 0),
-                    'total_user' => 0,
-                    'total_login' => 0,
-                    'month' => $bufferMonths,
-                    'start_date' => $crm['startDate'],
-                    'end_date' => $crm['endDate'],
-                    'status' => 'Enabled',
-                    'auto_renewal' => 'Disabled',
-                    'license_set_id' => $crm['licenseSetId'],
-                ]
-            );
+            // One HrLicense row per module — matches the Subscriber handover
+            // pattern (license_type='TimeTec {Module} (Trial)') so the Products
+            // tab's per-module aggregation and the All Licenses index dedupe
+            // (GROUP BY company_name) both work uniformly.
+            $handoverId = 'RSL_' . str_pad((string) $reseller->id, 6, '0', STR_PAD_LEFT);
+            $headcount = (int) ($application->headcount ?? 0);
+
+            foreach ($crm['applications'] as $module) {
+                HrLicense::updateOrCreate(
+                    [
+                        'handover_id' => $handoverId,
+                        'license_type' => "TimeTec {$module} (Trial)",
+                    ],
+                    [
+                        'software_handover_id' => null,
+                        'type' => 'TRIAL',
+                        'company_name' => $reseller->company_name,
+                        'license_category' => 'Reseller',
+                        'unit' => $headcount,
+                        'user_limit' => $headcount,
+                        'total_user' => 0,
+                        'total_login' => 0,
+                        'month' => $bufferMonths,
+                        'start_date' => $crm['startDate'],
+                        'end_date' => $crm['endDate'],
+                        'status' => 'Enabled',
+                        'auto_renewal' => 'Disabled',
+                        'license_set_id' => $crm['licenseSetId'],
+                    ]
+                );
+            }
 
             return $reseller;
         });
@@ -145,6 +158,8 @@ class ResellerApprovalService
             'dbProvisioned' => true,
             'dbError' => null,
             'crmPassword' => $crm['crmPasswordGenerated'],
+            'accountId' => $crm['accountId'],
+            'companyId' => $crm['companyId'],
         ];
     }
 
@@ -182,15 +197,12 @@ class ResellerApprovalService
             throw new RuntimeException("Phone number '{$rawPhone}' is invalid; cannot create CRM account.");
         }
 
-        // The reseller logs in with their chosen password. The CRM HR account
-        // requires a complex password — if the applicant's doesn't qualify,
-        // generate a compliant one and surface it to the admin.
-        $crmPasswordGenerated = null;
-        $crmPassword = (string) $application->password;
-        if (!$this->isCompliantPassword($crmPassword)) {
-            $crmPassword = $this->generateCompliantPassword();
-            $crmPasswordGenerated = $crmPassword;
-        }
+        // CRM HR-v2 account password is ALWAYS auto-generated (matches the
+        // Subscriber/handover flow). The form-typed password is reserved for
+        // reseller-portal login (bcrypt'd into reseller_v2.password) and is
+        // never used for CRM-side authentication.
+        $crmPassword = app(\App\Services\PasswordGeneratorService::class)->generate();
+        $crmPasswordGenerated = $crmPassword;
 
         // 1. Create CRM HR account.
         $accountResult = $crmService->createAccount([
@@ -276,6 +288,26 @@ class ResellerApprovalService
     }
 
     /**
+     * Insert (or re-find) a local `resellers` row for the approved partner.
+     * Used as a fallback when the legacy frontenddb lookup (resolveResellerId)
+     * returns null, so the new reseller shows up in the Subscriber-side
+     * "Assign to Reseller" dropdown immediately.
+     */
+    protected function ensureLocalResellerRow(?string $companyName): ?int
+    {
+        if (empty($companyName)) {
+            return null;
+        }
+
+        $existing = \App\Models\Reseller::whereRaw('UPPER(company_name) = ?', [strtoupper($companyName)])->first();
+        if ($existing) {
+            return (int) $existing->id;
+        }
+
+        return (int) \App\Models\Reseller::create(['company_name' => $companyName])->id;
+    }
+
+    /**
      * Resolve a bound reseller_id from the frontenddb by company name, matching
      * the logic used by the manual Create Reseller action.
      */
@@ -352,24 +384,4 @@ class ResellerApprovalService
         return ltrim($cleanPhone, '0');
     }
 
-    protected function isCompliantPassword(?string $password): bool
-    {
-        if (!is_string($password)) {
-            return false;
-        }
-
-        return strlen($password) >= 12
-            && preg_match('/[A-Z]/', $password)
-            && preg_match('/[a-z]/', $password)
-            && preg_match('/[0-9]/', $password)
-            && preg_match('/[^A-Za-z0-9]/', $password);
-    }
-
-    protected function generateCompliantPassword(): string
-    {
-        return Str::upper(Str::random(4))
-            . Str::lower(Str::random(4))
-            . random_int(1000, 9999)
-            . '!@';
-    }
 }
