@@ -227,6 +227,32 @@
         lazy
     />
 
+    {{-- Header action bar — same blue/green inline styles as termination-analysis page --}}
+    <div style="display:flex; justify-content:flex-end; gap:8px; margin-bottom:0.5rem;">
+        <button wire:click="generateForecastCost"
+            style="display:flex; align-items:center; gap:6px; padding:7px 12px; border:none; border-radius:8px; background:#2563eb; cursor:pointer; font-size:0.8rem; color:#fff; font-weight:600;"
+            onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#2563eb'">
+            <svg xmlns="http://www.w3.org/2000/svg" style="width:16px; height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="4" y="2" width="16" height="20" rx="2"></rect>
+                <line x1="8" y1="6" x2="16" y2="6"></line>
+                <line x1="8" y1="10" x2="10" y2="10"></line>
+                <line x1="12" y1="10" x2="16" y2="10"></line>
+                <line x1="8" y1="14" x2="10" y2="14"></line>
+                <line x1="12" y1="14" x2="16" y2="14"></line>
+                <line x1="8" y1="18" x2="16" y2="18"></line>
+            </svg>
+            Generate Forecast Cost
+        </button>
+        <button wire:click="exportToExcel"
+            style="display:flex; align-items:center; gap:6px; padding:7px 12px; border:none; border-radius:8px; background:#16a34a; cursor:pointer; font-size:0.8rem; color:#fff; font-weight:600;"
+            onmouseover="this.style.background='#15803d'" onmouseout="this.style.background='#16a34a'">
+            <svg style="width:16px; height:16px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+            </svg>
+            Export to Excel
+        </button>
+    </div>
+
     <!-- Filament Table -->
     {{ $this->table }}
 

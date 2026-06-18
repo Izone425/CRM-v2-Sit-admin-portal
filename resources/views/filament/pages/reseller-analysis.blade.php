@@ -152,6 +152,16 @@
             text-align: center;
         }
 
+        /* NOTE: positional :nth-child selectors. If you add or remove a column,
+           renumber every rule below and above; this is exactly how the previous
+           "empty band on the right" bug crept in. */
+        .reseller-table thead th:nth-child(6),
+        .reseller-table tbody td:nth-child(6) {
+            width: 1%;
+            white-space: nowrap;
+            text-align: right;
+        }
+
         .reseller-table tbody td:nth-child(5) {
             text-align: center;
         }
@@ -711,17 +721,47 @@
 
             <div class="reseller-header">
                 <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px;">
-                    <div>
-                        <h3>
-                            {{ \Carbon\Carbon::parse($myrStartDate)->format('d M Y') }} - {{ \Carbon\Carbon::parse($myrEndDate)->format('d M Y') }}
-                        </h3>
-                    </div>
                     <div class="account-filter">
                         <button @click="accountFilter = 'all'" :class="{'account-filter-btn': true, 'active': accountFilter === 'all'}">All ({{ count($myrData) }})</button>
                         <button @click="accountFilter = 'registered'" :class="{'account-filter-btn': true, 'active': accountFilter === 'registered'}">Registered ({{ $myrRegistered }})</button>
                         <button @click="accountFilter = 'unregistered'" :class="{'account-filter-btn': true, 'active': accountFilter === 'unregistered'}">Unregistered ({{ $myrUnregistered }})</button>
                     </div>
                 </div>
+                {{-- Inline date-range mode selector — replaces the Filter dropdown --}}
+                <div style="display:flex; align-items:center; gap:8px; margin-left:auto; margin-right:8px;">
+                    <div style="display:flex; align-items:center; gap:4px; background:#f1f5f9; border-radius:8px; padding:2px;">
+                        @foreach (['all' => 'All', 'year' => 'Year', 'month' => 'Month', 'range' => 'Range'] as $mode => $label)
+                            <button wire:click="$set('filterMode', '{{ $mode }}')"
+                                style="padding:6px 12px; border-radius:6px; border:none; font-size:0.75rem; font-weight:600; cursor:pointer;
+                                {{ $filterMode === $mode ? 'background:#1a56db; color:#fff;' : 'background:transparent; color:#64748b;' }}">
+                                {{ $label }}
+                            </button>
+                        @endforeach
+                    </div>
+
+                    @if ($filterMode === 'year')
+                        <select wire:model.change="selectedYear" style="padding:6px 10px; border:1px solid #d1d5db; border-radius:8px; font-size:0.75rem; background:#fff;">
+                            @foreach ($availableYears as $year)
+                                <option value="{{ $year }}">{{ $year }}</option>
+                            @endforeach
+                        </select>
+                    @elseif ($filterMode === 'month')
+                        <input type="month" wire:model.change="selectedMonthYear"
+                            style="padding:6px 10px; border:1px solid #d1d5db; border-radius:8px; font-size:0.75rem; background:#fff;">
+                    @elseif ($filterMode === 'range')
+                        <div style="display:flex; align-items:center; gap:4px;">
+                            <input type="date" wire:model.change="startDate" style="padding:6px 8px; border:1px solid #d1d5db; border-radius:8px; font-size:0.7rem;">
+                            <span style="color:#9ca3af; font-size:0.7rem;">to</span>
+                            <input type="date" wire:model.change="endDate" style="padding:6px 8px; border:1px solid #d1d5db; border-radius:8px; font-size:0.7rem;">
+                        </div>
+                    @endif
+                </div>
+                <span style="display:inline-flex; align-items:center; gap:6px; font-size:0.8rem; color:#1a56db; font-weight:700; white-space:nowrap; background:#eff6ff; border:1px solid #bfdbfe; padding:5px 10px; border-radius:8px; margin-right:8px;">
+                    <svg style="width:14px; height:14px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                    </svg>
+                    {{ \Carbon\Carbon::parse($myrStartDate)->format('d M Y') }} – {{ \Carbon\Carbon::parse($myrEndDate)->format('d M Y') }}
+                </span>
                 <div class="export-dropdown" x-data="{ open: false }" @click.outside="open = false">
                     <button type="button" class="export-btn" @click="open = !open"
                         wire:loading.attr="disabled" wire:target="exportToExcel('MYR'),exportPricingSummaryToExcel('MYR'),exportPricingSummaryAllToExcel('MYR')">
@@ -770,6 +810,7 @@
                         <th>#</th>
                         <th>Account</th>
                         <th>Reseller Name</th>
+                        <th>Total Forecast Cost</th>
                         <th>Total Clients</th>
                         <th></th>
                     </tr>
@@ -786,6 +827,14 @@
                                 @endif
                             </td>
                             <td class="reseller-name">{{ strtoupper($reseller['reseller_name']) }}</td>
+                            <td>
+                                <span style="display:inline-flex; align-items:center; gap:4px; font-weight:600; color:#16a34a;">
+                                    <svg style="width:12px; height:12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                    </svg>
+                                    RM {{ number_format($reseller['total_forecast_cost'] ?? 0) }}
+                                </span>
+                            </td>
                             <td>
                                 <span class="end-user-count"
                                     wire:click="openResellerDrawer('{{ addslashes($reseller['reseller_name']) }}', 'MYR')"
@@ -850,17 +899,47 @@
 
             <div class="reseller-header">
                 <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px;">
-                    <div>
-                        <h3>
-                            {{ \Carbon\Carbon::parse($usdStartDate)->format('d M Y') }} - {{ \Carbon\Carbon::parse($usdEndDate)->format('d M Y') }}
-                        </h3>
-                    </div>
                     <div class="account-filter">
                         <button @click="accountFilter = 'all'" :class="{'account-filter-btn': true, 'active': accountFilter === 'all'}">All ({{ count($usdData) }})</button>
                         <button @click="accountFilter = 'registered'" :class="{'account-filter-btn': true, 'active': accountFilter === 'registered'}">Registered ({{ $usdRegistered }})</button>
                         <button @click="accountFilter = 'unregistered'" :class="{'account-filter-btn': true, 'active': accountFilter === 'unregistered'}">Unregistered ({{ $usdUnregistered }})</button>
                     </div>
                 </div>
+                {{-- Inline date-range mode selector — replaces the Filter dropdown --}}
+                <div style="display:flex; align-items:center; gap:8px; margin-left:auto; margin-right:8px;">
+                    <div style="display:flex; align-items:center; gap:4px; background:#f1f5f9; border-radius:8px; padding:2px;">
+                        @foreach (['all' => 'All', 'year' => 'Year', 'month' => 'Month', 'range' => 'Range'] as $mode => $label)
+                            <button wire:click="$set('filterMode', '{{ $mode }}')"
+                                style="padding:6px 12px; border-radius:6px; border:none; font-size:0.75rem; font-weight:600; cursor:pointer;
+                                {{ $filterMode === $mode ? 'background:#1a56db; color:#fff;' : 'background:transparent; color:#64748b;' }}">
+                                {{ $label }}
+                            </button>
+                        @endforeach
+                    </div>
+
+                    @if ($filterMode === 'year')
+                        <select wire:model.change="selectedYear" style="padding:6px 10px; border:1px solid #d1d5db; border-radius:8px; font-size:0.75rem; background:#fff;">
+                            @foreach ($availableYears as $year)
+                                <option value="{{ $year }}">{{ $year }}</option>
+                            @endforeach
+                        </select>
+                    @elseif ($filterMode === 'month')
+                        <input type="month" wire:model.change="selectedMonthYear"
+                            style="padding:6px 10px; border:1px solid #d1d5db; border-radius:8px; font-size:0.75rem; background:#fff;">
+                    @elseif ($filterMode === 'range')
+                        <div style="display:flex; align-items:center; gap:4px;">
+                            <input type="date" wire:model.change="startDate" style="padding:6px 8px; border:1px solid #d1d5db; border-radius:8px; font-size:0.7rem;">
+                            <span style="color:#9ca3af; font-size:0.7rem;">to</span>
+                            <input type="date" wire:model.change="endDate" style="padding:6px 8px; border:1px solid #d1d5db; border-radius:8px; font-size:0.7rem;">
+                        </div>
+                    @endif
+                </div>
+                <span style="display:inline-flex; align-items:center; gap:6px; font-size:0.8rem; color:#1a56db; font-weight:700; white-space:nowrap; background:#eff6ff; border:1px solid #bfdbfe; padding:5px 10px; border-radius:8px; margin-right:8px;">
+                    <svg style="width:14px; height:14px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                    </svg>
+                    {{ \Carbon\Carbon::parse($usdStartDate)->format('d M Y') }} – {{ \Carbon\Carbon::parse($usdEndDate)->format('d M Y') }}
+                </span>
                 <div class="export-dropdown" x-data="{ open: false }" @click.outside="open = false">
                     <button type="button" class="export-btn" @click="open = !open"
                         wire:loading.attr="disabled" wire:target="exportToExcel('USD'),exportPricingSummaryToExcel('USD'),exportPricingSummaryAllToExcel('USD')">
@@ -909,6 +988,7 @@
                         <th>#</th>
                         <th>Account</th>
                         <th>Reseller Name</th>
+                        <th>Total Forecast Cost</th>
                         <th>Total Clients</th>
                         <th></th>
                     </tr>
@@ -925,6 +1005,14 @@
                                 @endif
                             </td>
                             <td class="reseller-name">{{ strtoupper($reseller['reseller_name']) }}</td>
+                            <td>
+                                <span style="display:inline-flex; align-items:center; gap:4px; font-weight:600; color:#16a34a;">
+                                    <svg style="width:12px; height:12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                    </svg>
+                                    USD {{ number_format($reseller['total_forecast_cost'] ?? 0) }}
+                                </span>
+                            </td>
                             <td>
                                 <span class="end-user-count"
                                     wire:click="openResellerDrawer('{{ addslashes($reseller['reseller_name']) }}', 'USD')"
@@ -1492,6 +1580,18 @@
                                     {{ $statusLabels[$client['status']] ?? ucfirst(str_replace('_', ' ', $client['status'])) }}
                                 </span>
                                 <span>Expires: {{ \Carbon\Carbon::parse($client['earliest_expiry'])->format('d M Y') }}</span>
+                                <span style="display:inline-flex; align-items:center; gap:4px; font-weight:600; color:#1a56db;">
+                                    <svg style="width:12px; height:12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-5.13a4 4 0 11-8 0 4 4 0 018 0zm6 3a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                    </svg>
+                                    HC: {{ number_format($client['total_hc'] ?? 0) }}
+                                </span>
+                                <span style="display:inline-flex; align-items:center; gap:4px; font-weight:600; color:#16a34a;">
+                                    <svg style="width:12px; height:12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                    </svg>
+                                    Forecast: {{ $drawerCurrency }} {{ number_format(($client['total_hc'] ?? 0) * 12) }}
+                                </span>
                             </div>
                         </div>
                     @endforeach

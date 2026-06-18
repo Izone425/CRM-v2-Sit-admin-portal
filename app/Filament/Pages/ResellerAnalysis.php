@@ -19,11 +19,21 @@ class ResellerAnalysis extends Page
     public $showDrawer = false;
     public $drawerTitle = '';
     public $drawerClients = [];
+    public string $drawerCurrency = 'MYR';
     public $activeTab = 'MYR';
 
     // Cached data per currency
     public $myrData = [];
     public $usdData = [];
+
+    // Date range selector — mirrors Termination Analysis / Renewal Process Data tabs.
+    public string $filterMode = 'all';
+    public string $selectedYear = '';
+    public ?int $selectedMonth = null;
+    public string $selectedMonthYear = '';
+    public ?string $startDate = null;
+    public ?string $endDate = null;
+    public array $availableYears = [];
 
     // Reseller Commission tab — bucketed by max f_rate per reseller, per currency.
     public $commissionData = [];
@@ -54,6 +64,12 @@ class ResellerAnalysis extends Page
 
     public function mount(): void
     {
+        $this->selectedYear = (string) now()->year;
+        $this->selectedMonth = now()->month;
+        $this->selectedMonthYear = now()->format('Y-m');
+        $current = now()->year;
+        $this->availableYears = range($current - 3, $current + 3);
+
         $this->myrData = $this->getResellerData('MYR');
         $this->usdData = $this->getResellerData('USD');
         $this->commissionData = [
@@ -569,9 +585,62 @@ class ResellerAnalysis extends Page
 
     protected function getDateRange(): array
     {
-        $start = Carbon::now()->format('Y-m-d');
-        $end = Carbon::now()->addYears(10)->format('Y-m-d');
-        return [$start, $end];
+        return match ($this->filterMode) {
+            'year' => [
+                Carbon::create((int) $this->selectedYear, 1, 1)->format('Y-m-d'),
+                Carbon::create((int) $this->selectedYear, 12, 31)->format('Y-m-d'),
+            ],
+            'month' => [
+                Carbon::create((int) $this->selectedYear, $this->selectedMonth ?? now()->month, 1)
+                    ->startOfMonth()->format('Y-m-d'),
+                Carbon::create((int) $this->selectedYear, $this->selectedMonth ?? now()->month, 1)
+                    ->endOfMonth()->format('Y-m-d'),
+            ],
+            'range' => [
+                $this->startDate ?: Carbon::now()->format('Y-m-d'),
+                $this->endDate ?: Carbon::now()->addYears(10)->format('Y-m-d'),
+            ],
+            default => [
+                Carbon::now()->format('Y-m-d'),
+                Carbon::now()->addYears(10)->format('Y-m-d'),
+            ],
+        };
+    }
+
+    public function updatedFilterMode(): void
+    {
+        $this->reloadResellerData();
+    }
+
+    public function updatedSelectedYear(): void
+    {
+        $this->reloadResellerData();
+    }
+
+    public function updatedSelectedMonthYear(): void
+    {
+        if (! empty($this->selectedMonthYear)) {
+            [$y, $m] = explode('-', $this->selectedMonthYear);
+            $this->selectedYear = $y;
+            $this->selectedMonth = (int) $m;
+        }
+        $this->reloadResellerData();
+    }
+
+    public function updatedStartDate(): void
+    {
+        $this->reloadResellerData();
+    }
+
+    public function updatedEndDate(): void
+    {
+        $this->reloadResellerData();
+    }
+
+    protected function reloadResellerData(): void
+    {
+        $this->myrData = $this->getResellerData('MYR');
+        $this->usdData = $this->getResellerData('USD');
     }
 
     /**
@@ -647,10 +716,14 @@ class ResellerAnalysis extends Page
             }
 
             $licensesQuery = $this->buildExclusionQuery($licensesQuery);
-            $companiesWithLicenses = $licensesQuery->distinct()->pluck('f_company_id')->toArray();
-
-            // Create a set for fast lookup
-            $companiesWithLicensesSet = array_flip($companiesWithLicenses);
+            // Per-company HC sum in the date range; keys also serve as the "has licenses" set
+            // (replaces the prior distinct() pluck). Reused below to compute per-reseller HC + forecast.
+            $companyHcMap = $licensesQuery
+                ->selectRaw('f_company_id, SUM(f_unit) as total_hc')
+                ->groupBy('f_company_id')
+                ->pluck('total_hc', 'f_company_id')
+                ->toArray();
+            $companiesWithLicensesSet = $companyHcMap;
 
             // Batch fetch registered reseller IDs and codes from reseller_v2
             $resellerV2Data = \App\Models\ResellerV2::whereNotNull('reseller_id')
@@ -664,10 +737,12 @@ class ResellerAnalysis extends Page
                 $companyIds = $companies->pluck('f_id')->toArray();
                 $resellerId = $companies->first()->reseller_id;
                 $totalClients = 0;
+                $totalHc = 0;
 
                 foreach ($companyIds as $companyId) {
-                    if (isset($companiesWithLicensesSet[$companyId])) {
+                    if (isset($companyHcMap[$companyId])) {
                         $totalClients++;
+                        $totalHc += (int) $companyHcMap[$companyId];
                     }
                 }
 
@@ -676,6 +751,9 @@ class ResellerAnalysis extends Page
                     $result[] = [
                         'reseller_name' => $resellerName,
                         'total_end_users' => $totalClients,
+                        'total_hc' => $totalHc,
+                        // Forecast Cost = HC × rate(1) × months(12); matches AdminRenewalProcessData*::generateForecastCost()
+                        'total_forecast_cost' => $totalHc * 12,
                         'has_account' => isset($registeredResellerIds[$resellerId]),
                         'debtor_code' => $rv2->debtor_code ?? '',
                         'creditor_code' => $rv2->creditor_code ?? '',
@@ -695,6 +773,7 @@ class ResellerAnalysis extends Page
     public function openResellerDrawer(string $resellerName, string $currency): void
     {
         try {
+            $this->drawerCurrency = $currency;
             [$startDate, $endDate] = $this->getDateRange();
 
             // Get companies for this reseller
@@ -738,7 +817,7 @@ class ResellerAnalysis extends Page
 
             $licensesQuery = $this->buildExclusionQuery($licensesQuery);
             $companyData = $licensesQuery
-                ->selectRaw('f_company_id, f_company_name, MIN(f_expiry_date) as earliest_expiry')
+                ->selectRaw('f_company_id, f_company_name, MIN(f_expiry_date) as earliest_expiry, SUM(f_unit) as total_hc')
                 ->groupBy('f_company_id', 'f_company_name')
                 ->get();
 
@@ -762,6 +841,7 @@ class ResellerAnalysis extends Page
                     'status' => $renewal ? $renewal->renewal_progress : 'no_record',
                     'earliest_expiry' => $company->earliest_expiry,
                     'lead_id' => $renewal?->lead_id,
+                    'total_hc' => (int) $company->total_hc,
                 ];
             }
 
@@ -1066,7 +1146,7 @@ class ResellerAnalysis extends Page
 
             $licensesQuery = $this->buildExclusionQuery($licensesQuery);
             $companyData = $licensesQuery
-                ->selectRaw('f_company_id, f_company_name, MIN(f_expiry_date) as earliest_expiry')
+                ->selectRaw('f_company_id, f_company_name, MIN(f_expiry_date) as earliest_expiry, SUM(f_unit) as total_hc')
                 ->groupBy('f_company_id', 'f_company_name')
                 ->get();
 
@@ -1078,6 +1158,7 @@ class ResellerAnalysis extends Page
                     'status' => $renewal ? $renewal->renewal_progress : 'no_record',
                     'earliest_expiry' => $company->earliest_expiry,
                     'lead_id' => $renewal?->lead_id,
+                    'total_hc' => (int) $company->total_hc,
                 ];
             }
 
@@ -1097,7 +1178,7 @@ class ResellerAnalysis extends Page
         $safeName = preg_replace('/[^a-zA-Z0-9_-]/', '_', $title);
 
         return \Maatwebsite\Excel\Facades\Excel::download(
-            new \App\Exports\ResellerAnalysisDetailExport($clients, $title),
+            new \App\Exports\ResellerAnalysisDetailExport($clients, $title, $currency),
             "reseller_detail_{$safeName}_{$timestamp}.xlsx"
         );
     }

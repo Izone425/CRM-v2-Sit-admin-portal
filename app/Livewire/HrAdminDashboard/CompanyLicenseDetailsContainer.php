@@ -146,6 +146,31 @@ class CompanyLicenseDetailsContainer extends Component
             }
         }
 
+        // Same pattern for Distributor: resolve via CRM IDs or by parsing
+        // the DST_xxxxxx handover_id pattern; backfill the component's
+        // hrAccountId/hrCompanyId so downstream tabs work uniformly.
+        $distributorV2 = null;
+        if (
+            ($this->hrAccountId !== null && $this->hrCompanyId !== null)
+            || ($this->handoverId && str_starts_with($this->handoverId, 'DST_'))
+        ) {
+            if ($this->hrAccountId !== null && $this->hrCompanyId !== null) {
+                $distributorV2 = \App\Models\DistributorV2::where('hr_account_id', $this->hrAccountId)
+                    ->where('hr_company_id', $this->hrCompanyId)
+                    ->first();
+            }
+
+            if (! $distributorV2 && $this->handoverId && str_starts_with($this->handoverId, 'DST_')) {
+                $distributorId = (int) ltrim(substr($this->handoverId, 4), '0');
+                $distributorV2 = \App\Models\DistributorV2::find($distributorId);
+            }
+
+            if ($distributorV2) {
+                $this->hrAccountId = $this->hrAccountId ?? $distributorV2->hr_account_id;
+                $this->hrCompanyId = $this->hrCompanyId ?? $distributorV2->hr_company_id;
+            }
+        }
+
         // Build upline info for Reseller/Subscriber companies
         $uplineInfo = null;
         if ($softwareHandover && $softwareHandover->reseller_id) {
@@ -211,6 +236,11 @@ class CompanyLicenseDetailsContainer extends Component
             $allFormattedHandoverIds[] = 'RSL_' . str_pad((string) $resellerV2->id, 6, '0', STR_PAD_LEFT);
         }
 
+        // Distributor fallback: same shape as Reseller, DST_xxxxxx prefix.
+        if (empty($allFormattedHandoverIds) && $distributorV2) {
+            $allFormattedHandoverIds[] = 'DST_' . str_pad((string) $distributorV2->id, 6, '0', STR_PAD_LEFT);
+        }
+
         // Build company data context
         $this->companyData = [
             'software_handover' => $softwareHandover,
@@ -228,6 +258,7 @@ class CompanyLicenseDetailsContainer extends Component
             'hr_user_id' => $softwareHandover?->hr_user_id ?? $resellerV2?->hr_user_id,
             'license_category' => $hrLicense?->license_category ?? 'Subscriber',
             'reseller_v2' => $resellerV2,
+            'distributor_v2' => $distributorV2,
             'upline_info' => $uplineInfo,
         ];
     }

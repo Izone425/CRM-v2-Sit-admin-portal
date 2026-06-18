@@ -12,11 +12,13 @@ class ResellerAnalysisDetailExport implements FromArray, WithHeadings, WithStyle
 {
     protected array $clients;
     protected string $title;
+    protected string $currency;
 
-    public function __construct(array $clients, string $title)
+    public function __construct(array $clients, string $title, string $currency = 'MYR')
     {
         $this->clients = $clients;
         $this->title = $title;
+        $this->currency = $currency;
     }
 
     public function array(): array
@@ -33,11 +35,14 @@ class ResellerAnalysisDetailExport implements FromArray, WithHeadings, WithStyle
 
         $rows = [];
         foreach ($this->clients as $index => $client) {
+            $hc = (int) ($client['total_hc'] ?? 0);
             $rows[] = [
                 $index + 1,
                 $client['company_name'],
                 $statusLabels[$client['status']] ?? ucfirst(str_replace('_', ' ', $client['status'])),
                 $client['earliest_expiry'],
+                $hc,
+                $hc * 12, // Forecast Cost = HC × rate(1) × months(12); matches AdminRenewalProcessData*::generateForecastCost()
             ];
         }
 
@@ -46,14 +51,14 @@ class ResellerAnalysisDetailExport implements FromArray, WithHeadings, WithStyle
 
     public function headings(): array
     {
-        return ['#', 'Client Name', 'Status', 'Expiry Date'];
+        return ['#', 'Client Name', 'Status', 'Expiry Date', 'Total HC', "Forecast Cost ({$this->currency})"];
     }
 
     public function styles(Worksheet $sheet)
     {
         return [
             1 => ['font' => ['bold' => true, 'size' => 12]],
-            'A:D' => ['alignment' => ['horizontal' => 'left']],
+            'A:F' => ['alignment' => ['horizontal' => 'left']],
         ];
     }
 

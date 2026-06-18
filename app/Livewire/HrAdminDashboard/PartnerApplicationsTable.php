@@ -135,7 +135,10 @@ class PartnerApplicationsTable extends Component implements HasForms, HasTable
                     ])
                     ->action(function (PartnerApplication $record, array $data): void {
                         try {
-                            $result = app(ResellerApprovalService::class)->approve(
+                            $service = $record->partner_type === 'distributor'
+                                ? app(\App\Services\DistributorApprovalService::class)
+                                : app(ResellerApprovalService::class);
+                            $result = $service->approve(
                                 $record,
                                 (int) ($data['buffer_months'] ?? 1),
                                 $data['review_remark'] ?? null,

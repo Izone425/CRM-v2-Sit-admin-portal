@@ -76,7 +76,7 @@
                         <tr style="background:{{ $index % 2 === 0 ? '#fff' : '#f9fafb' }}; border-bottom:1px solid #e5e7eb;"
                             onmouseenter="this.style.background='#f3f4f6'" onmouseleave="this.style.background='{{ $index % 2 === 0 ? '#fff' : '#f9fafb' }}'">
                             <td style="padding-left:16px; padding-right:16px; padding-top:10px; padding-bottom:10px; white-space:nowrap;">
-                                @if($reseller['software_handover_id'])
+                                @if(!empty($reseller['hr_account_id']) && !empty($reseller['hr_company_id']))
                                     <a href="{{ url('/admin/hr-company-license-details?' . http_build_query([
                                         'hrAccountId' => $reseller['hr_account_id'] ?? null,
                                         'hrCompanyId' => $reseller['hr_company_id'] ?? null,

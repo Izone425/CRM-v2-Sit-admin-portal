@@ -3,6 +3,7 @@
 namespace App\Livewire\HrAdminDashboard;
 
 use App\Models\HrLicense;
+use App\Models\ResellerV2;
 use App\Models\SoftwareHandover;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
@@ -45,11 +46,14 @@ class CompanyCustomerTab extends Component
     {
         $softwareHandover = $this->companyData['software_handover'] ?? null;
         $resellerV2 = $this->companyData['reseller_v2'] ?? null;
+        $distributorV2 = $this->companyData['distributor_v2'] ?? null;
 
         // Subscriber view: use the dealer assigned to the current handover.
-        // Reseller view: no SoftwareHandover exists — fall back to the local
-        // resellers.id linked from the reseller_v2 row.
-        $resellerId = $softwareHandover?->reseller_id ?? $resellerV2?->reseller_id;
+        // Reseller/Distributor view: no SoftwareHandover exists — fall back to
+        // the local resellers.id linked from the respective v2 row.
+        $resellerId = $softwareHandover?->reseller_id
+            ?? $resellerV2?->reseller_id
+            ?? $distributorV2?->reseller_id;
         $currentSwId = $softwareHandover?->id;
 
         if (!$resellerId) {
@@ -129,6 +133,17 @@ class CompanyCustomerTab extends Component
             $this->resellers = $buildDisplay($resellerRecords);
             $this->subscribers = $buildDisplay($subscriberRecords);
 
+            // Reseller children are linked through reseller_v2.parent_reseller_id
+            // (the dealer assignment), NOT software_handover.reseller_id — they
+            // have no SoftwareHandover, so the HrLicense query above can never
+            // surface them. Fetch and merge them into the Resellers section.
+            // (Distributor children would follow the identical parent_reseller_id
+            // pattern via DistributorV2 if distributors are ever nested.)
+            $this->resellers = array_merge(
+                $this->resellers,
+                $this->loadResellerChildren($resellerId)
+            );
+
             // Compute unfiltered counts for badges
             $this->computeCounts($resellerId, $currentSwId);
 
@@ -140,6 +155,53 @@ class CompanyCustomerTab extends Component
             $this->resellers = [];
             $this->subscribers = [];
         }
+    }
+
+    /**
+     * Resellers assigned to this company via reseller_v2.parent_reseller_id.
+     * Built directly from the v2 row (no SoftwareHandover exists) and shaped to
+     * match the Resellers-section display rows. Honors the search/status filters.
+     */
+    protected function loadResellerChildren(int $resellerId): array
+    {
+        return $this->resellerChildrenQuery($resellerId)
+            ->get()
+            ->map(function ($r) {
+                return [
+                    'id' => $r->hr_account_id ?? '-',
+                    'software_handover_id' => null,
+                    'hr_account_id' => $r->hr_account_id,
+                    'hr_company_id' => $r->hr_company_id,
+                    'name' => $r->company_name ?? '-',
+                    'joined_date' => $r->created_at
+                        ? Carbon::parse($r->created_at)->format('d-m-Y')
+                        : '-',
+                    'status' => strtolower((string) $r->status) === 'active' ? 'Active' : 'Inactive',
+                ];
+            })
+            ->values()
+            ->toArray();
+    }
+
+    /**
+     * Base query for reseller children with the active search/status filters
+     * applied (shared by the list builder and the badge counts).
+     */
+    protected function resellerChildrenQuery(int $resellerId)
+    {
+        $query = ResellerV2::where('parent_reseller_id', $resellerId);
+
+        if (!empty($this->search)) {
+            $query->where('company_name', 'like', '%' . $this->search . '%');
+        }
+
+        if ($this->statusFilter === 'active') {
+            $query->whereRaw('LOWER(status) = ?', ['active']);
+        } elseif ($this->statusFilter === 'inactive') {
+            $query->whereRaw('LOWER(status) != ?', ['active']);
+        }
+
+        return $query;
     }
 
     protected function computeCounts(int $resellerId, ?int $currentSwId): void
@@ -168,6 +230,11 @@ class CompanyCustomerTab extends Component
         $this->resellerInactiveCount   = $perCustomer->where('license_category', 'Reseller')->where('enabled', false)->count();
         $this->subscriberActiveCount   = $perCustomer->where('license_category', 'Subscriber')->where('enabled', true)->count();
         $this->subscriberInactiveCount = $perCustomer->where('license_category', 'Subscriber')->where('enabled', false)->count();
+
+        // Add reseller children linked via parent_reseller_id (unfiltered totals).
+        $childStatuses = ResellerV2::where('parent_reseller_id', $resellerId)->pluck('status');
+        $this->resellerActiveCount   += $childStatuses->filter(fn ($s) => strtolower((string) $s) === 'active')->count();
+        $this->resellerInactiveCount += $childStatuses->filter(fn ($s) => strtolower((string) $s) !== 'active')->count();
     }
 
     public function searchCustomers(): void

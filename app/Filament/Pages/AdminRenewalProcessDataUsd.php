@@ -284,6 +284,75 @@ class AdminRenewalProcessDataUsd extends Page implements HasTable
         $this->showForecastModal = false;
     }
 
+    public function exportToExcel()
+    {
+        $query = $this->getFilteredTableQuery();
+
+        $sortColumn = $this->tableSortColumn ?? 'earliest_expiry';
+        $sortDirection = $this->tableSortDirection ?? 'asc';
+        $query->reorder()->orderBy($sortColumn, $sortDirection);
+
+        $records = $query->get();
+
+        $data = [];
+        foreach ($records as $record) {
+            $companyId = $record->f_company_id ?? null;
+
+            $renewal = $companyId ? $this->getCachedRenewal($companyId) : null;
+            $renewalStatus = '';
+            if ($renewal && $renewal->renewal_progress) {
+                $renewalStatus = match ($renewal->renewal_progress) {
+                    'new' => 'New',
+                    'pending_confirmation' => 'Pending Confirmation',
+                    'pending_payment' => 'Pending Payment',
+                    'completed_renewal' => 'Completed Payment',
+                    'completed_reseller_portal' => 'Completed(Reseller Portal)',
+                    default => ucfirst(str_replace('_', ' ', $renewal->renewal_progress))
+                };
+            }
+
+            $totalAmount = '0.00';
+            if ($renewal && $renewal->lead_id) {
+                $cacheKey = "renewal_quotation_amount_{$renewal->lead_id}";
+                $amount = Cache::remember($cacheKey, 300, function () use ($renewal) {
+                    $lead = Lead::find($renewal->lead_id);
+                    if (!$lead) return 0;
+                    return $lead->quotations()
+                        ->where('mark_as_final', true)
+                        ->where('sales_type', 'RENEWAL SALES')
+                        ->with('items')
+                        ->get()
+                        ->sum(fn ($q) => $q->items->sum('total_before_tax'));
+                });
+                $totalAmount = number_format($amount, 2);
+            }
+
+            $followUpDate = 'N/A';
+            if ($renewal && $renewal->renewal_progress !== 'new' && $renewal->follow_up_date) {
+                $followUpDate = Carbon::parse($renewal->follow_up_date)->format('d M Y');
+            }
+
+            $reseller = $companyId ? $this->getCachedReseller($companyId) : null;
+            $category = $reseller ? 'Reseller' : '';
+
+            $data[] = [
+                'company_name' => strtoupper($record->f_company_name),
+                'expired_license' => $record->earliest_expiry ? Carbon::parse($record->earliest_expiry)->format('d M Y') : '',
+                'renewal_status' => $renewalStatus,
+                'amount' => $totalAmount,
+                'next_follow_up_date' => $followUpDate,
+                'category' => $category,
+            ];
+        }
+
+        $timestamp = now()->format('Y-m-d_H-i-s');
+
+        return \Maatwebsite\Excel\Facades\Excel::download(
+            new \App\Exports\RenewalProcessDataExport($data, 'USD'),
+            "renewal_process_data_USD_{$timestamp}.xlsx"
+        );
+    }
+
     public function mount(): void
     {
         $today = Carbon::now()->format('d/m/Y');
@@ -296,10 +365,15 @@ class AdminRenewalProcessDataUsd extends Page implements HasTable
     public function getFilteredCompanyIds(): array
     {
         try {
+            // f_company_id is varchar zero-padded in crm_customer_lic_data
+            // (e.g. "0000011358") but stored unpadded in renewals
+            // (e.g. "11358"). Casting to int strips the padding so downstream
+            // whereIn() against renewals.f_company_id matches.
             return $this->getFilteredTableQuery()
                 ->distinct()
                 ->pluck('f_company_id')
                 ->filter()
+                ->map(fn ($id) => (int) $id)
                 ->values()
                 ->toArray();
         } catch (\Exception $e) {
@@ -1620,89 +1694,6 @@ class AdminRenewalProcessDataUsd extends Page implements HasTable
                         if (!$reseller) return null;
 
                         return new HtmlString(strtoupper($reseller->reseller_name));
-                    }),
-            ])
-            ->headerActions([
-                Action::make('generate_forecast_cost')
-                    ->label('Generate Forecast Cost')
-                    ->icon('heroicon-o-document-text')
-                    ->color('info')
-                    ->action(fn () => $this->generateForecastCost()),
-                Action::make('export_to_excel')
-                    ->label('Export to Excel')
-                    ->icon('heroicon-o-arrow-down-tray')
-                    ->color('success')
-                    ->action(function () {
-                        $query = $this->getFilteredTableQuery();
-
-                        // Apply current table sorting (fallback to default sort)
-                        $sortColumn = $this->tableSortColumn ?? 'earliest_expiry';
-                        $sortDirection = $this->tableSortDirection ?? 'asc';
-                        $query->reorder()->orderBy($sortColumn, $sortDirection);
-
-                        $records = $query->get();
-
-                        $data = [];
-                        foreach ($records as $record) {
-                            $companyId = $record->f_company_id ?? null;
-
-                            // Renewal Status
-                            $renewal = $companyId ? $this->getCachedRenewal($companyId) : null;
-                            $renewalStatus = '';
-                            if ($renewal && $renewal->renewal_progress) {
-                                $renewalStatus = match ($renewal->renewal_progress) {
-                                    'new' => 'New',
-                                    'pending_confirmation' => 'Pending Confirmation',
-                                    'pending_payment' => 'Pending Payment',
-                                    'completed_renewal' => 'Completed Payment',
-                                    'completed_reseller_portal' => 'Completed(Reseller Portal)',
-                                    default => ucfirst(str_replace('_', ' ', $renewal->renewal_progress))
-                                };
-                            }
-
-                            // Amount
-                            $totalAmount = '0.00';
-                            if ($renewal && $renewal->lead_id) {
-                                $cacheKey = "renewal_quotation_amount_{$renewal->lead_id}";
-                                $amount = Cache::remember($cacheKey, 300, function () use ($renewal) {
-                                    $lead = Lead::find($renewal->lead_id);
-                                    if (!$lead) return 0;
-                                    return $lead->quotations()
-                                        ->where('mark_as_final', true)
-                                        ->where('sales_type', 'RENEWAL SALES')
-                                        ->with('items')
-                                        ->get()
-                                        ->sum(fn ($q) => $q->items->sum('total_before_tax'));
-                                });
-                                $totalAmount = number_format($amount, 2);
-                            }
-
-                            // Next Follow Up Date
-                            $followUpDate = 'N/A';
-                            if ($renewal && $renewal->renewal_progress !== 'new' && $renewal->follow_up_date) {
-                                $followUpDate = Carbon::parse($renewal->follow_up_date)->format('d M Y');
-                            }
-
-                            // Category
-                            $reseller = $companyId ? $this->getCachedReseller($companyId) : null;
-                            $category = $reseller ? 'Reseller' : '';
-
-                            $data[] = [
-                                'company_name' => strtoupper($record->f_company_name),
-                                'expired_license' => $record->earliest_expiry ? Carbon::parse($record->earliest_expiry)->format('d M Y') : '',
-                                'renewal_status' => $renewalStatus,
-                                'amount' => $totalAmount,
-                                'next_follow_up_date' => $followUpDate,
-                                'category' => $category,
-                            ];
-                        }
-
-                        $timestamp = now()->format('Y-m-d_H-i-s');
-
-                        return \Maatwebsite\Excel\Facades\Excel::download(
-                            new \App\Exports\RenewalProcessDataExport($data, 'USD'),
-                            "renewal_process_data_USD_{$timestamp}.xlsx"
-                        );
                     }),
             ])
             ->actions([

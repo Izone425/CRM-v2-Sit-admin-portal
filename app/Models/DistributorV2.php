@@ -7,13 +7,13 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
-class ResellerV2 extends Authenticatable
+class DistributorV2 extends Authenticatable
 {
     use HasApiTokens, HasFactory, Notifiable;
 
-    protected $guard = 'reseller';
+    protected $guard = 'distributor';
 
-    protected $table = 'reseller_v2';
+    protected $table = 'distributor_v2';
 
     protected $fillable = [
         'name',
@@ -77,32 +77,13 @@ class ResellerV2 extends Authenticatable
         'headcount' => 'integer',
     ];
 
-    /**
-     * Get the partner application this reseller was created from (if any)
-     */
     public function partnerApplication()
     {
         return $this->belongsTo(PartnerApplication::class, 'partner_application_id');
     }
 
-    /**
-     * Get the leads associated with the reseller
-     */
-    public function leads()
-    {
-        return $this->hasMany(Lead::class, 'reseller_v2_id');
-    }
-
-    /**
-     * Get the bound reseller from admin portal
-     */
     public function reseller()
     {
         return $this->belongsTo(Reseller::class, 'reseller_id');
-    }
-
-    public function commission()
-    {
-        return $this->hasOne(ResellerV2Commission::class, 'reseller_v2_id');
     }
 }

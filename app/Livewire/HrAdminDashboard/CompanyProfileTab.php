@@ -473,6 +473,7 @@ class CompanyProfileTab extends Component
     {
         $softwareHandover = $this->companyData['software_handover'] ?? null;
         $resellerV2 = $this->companyData['reseller_v2'] ?? null;
+        $distributorV2 = $this->companyData['distributor_v2'] ?? null;
 
         if ($softwareHandover) {
             $this->credentialCreatedAt = $softwareHandover->completed_at
@@ -512,6 +513,28 @@ class CompanyProfileTab extends Component
             $this->credentialAccountId = $resellerV2->hr_account_id;
             $this->credentialPassword = $resellerV2->plain_password ?: 'N/A';
             $this->credentialStatus = $resellerV2->status;
+            return;
+        }
+
+        // Distributor fallback — same shape as Reseller.
+        if ($distributorV2) {
+            $this->credentialCreatedAt = $distributorV2->created_at
+                ? Carbon::parse($distributorV2->created_at)->format('Y-m-d H:i:s')
+                : null;
+
+            $salesPerson = null;
+            $partnerApp = $distributorV2->partner_application_id
+                ? \App\Models\PartnerApplication::with('reviewer')->find($distributorV2->partner_application_id)
+                : null;
+            if ($partnerApp?->reviewer) {
+                $salesPerson = $partnerApp->reviewer->name;
+            }
+            $this->credentialSalesPerson = $salesPerson;
+
+            $this->credentialMasterEmail = $distributorV2->email;
+            $this->credentialAccountId = $distributorV2->hr_account_id;
+            $this->credentialPassword = $distributorV2->plain_password ?: 'N/A';
+            $this->credentialStatus = $distributorV2->status;
         }
     }
 

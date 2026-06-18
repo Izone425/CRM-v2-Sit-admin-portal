@@ -5,6 +5,8 @@ namespace App\Livewire\HrAdminDashboard;
 use App\Models\SoftwareHandover;
 use App\Models\LicenseCertificate;
 use App\Models\Reseller;
+use App\Models\ResellerV2;
+use App\Models\DistributorV2;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Components\Section;
@@ -21,6 +23,12 @@ class CompanyAccountSettingTab extends Component implements HasForms
 
     public ?int $softwareHandoverId = null;
     public array $companyData = [];
+
+    // Resolved save target for the Dealer/Distributor assignment.
+    // Subscribers save to SoftwareHandover; Resellers/Distributors have no
+    // SoftwareHandover, so they save to the v2 row's parent_reseller_id.
+    public ?string $assignTargetType = null; // 'software_handover' | 'reseller_v2' | 'distributor_v2'
+    public ?int $assignTargetId = null;
 
     // Form data
     public ?string $trialStartDate = null;
@@ -41,8 +49,13 @@ class CompanyAccountSettingTab extends Component implements HasForms
     protected function loadSettingsData(): void
     {
         $softwareHandover = $this->companyData['software_handover'] ?? null;
+        $resellerV2 = $this->companyData['reseller_v2'] ?? null;
+        $distributorV2 = $this->companyData['distributor_v2'] ?? null;
 
         if ($softwareHandover) {
+            // Subscriber: the assigned dealer lives on the SoftwareHandover.
+            $this->assignTargetType = 'software_handover';
+            $this->assignTargetId = $this->softwareHandoverId;
             $this->dealerId = $softwareHandover->reseller_id;
 
             // Load license certificate for trial period
@@ -53,6 +66,17 @@ class CompanyAccountSettingTab extends Component implements HasForms
                     $this->trialEndDate = $licenseCert->buffer_license_end?->format('Y-m-d');
                 }
             }
+        } elseif ($resellerV2) {
+            // Reseller: no SoftwareHandover — save the upline dealer to
+            // parent_reseller_id (reseller_id stays the self/child-lookup code).
+            $this->assignTargetType = 'reseller_v2';
+            $this->assignTargetId = $resellerV2->id;
+            $this->dealerId = $resellerV2->parent_reseller_id;
+        } elseif ($distributorV2) {
+            // Distributor: same shape as Reseller.
+            $this->assignTargetType = 'distributor_v2';
+            $this->assignTargetId = $distributorV2->id;
+            $this->dealerId = $distributorV2->parent_reseller_id;
         }
     }
 
@@ -67,14 +91,31 @@ class CompanyAccountSettingTab extends Component implements HasForms
 
     public function updatedDealerId($value): void
     {
-        $sw = SoftwareHandover::find($this->softwareHandoverId);
-        if ($sw) {
-            $sw->update(['reseller_id' => $value ?: null]);
+        $record = match ($this->assignTargetType) {
+            'software_handover' => SoftwareHandover::find($this->assignTargetId),
+            'reseller_v2' => ResellerV2::find($this->assignTargetId),
+            'distributor_v2' => DistributorV2::find($this->assignTargetId),
+            default => null,
+        };
+
+        if (! $record) {
             Notification::make()
-                ->title($value ? 'Dealer assigned successfully.' : 'Dealer unlinked successfully.')
-                ->success()
+                ->title('Unable to save: no company record to assign.')
+                ->danger()
                 ->send();
+            return;
         }
+
+        $column = $this->assignTargetType === 'software_handover'
+            ? 'reseller_id'
+            : 'parent_reseller_id';
+
+        $record->update([$column => $value ?: null]);
+
+        Notification::make()
+            ->title($value ? 'Dealer assigned successfully.' : 'Dealer unlinked successfully.')
+            ->success()
+            ->send();
     }
 
     public function updatedBillingMethod($value): void

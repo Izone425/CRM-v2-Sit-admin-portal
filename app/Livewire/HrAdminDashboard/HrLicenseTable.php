@@ -106,6 +106,15 @@ class HrLicenseTable extends Component implements HasForms, HasTable
             $hrCompanyId = $hrCompanyId ?? $reseller?->hr_company_id;
         }
 
+        if (($hrAccountId === null || $hrCompanyId === null)
+            && str_starts_with((string) $record->handover_id, 'DST_')
+        ) {
+            $distributorId = (int) ltrim(substr($record->handover_id, 4), '0');
+            $distributor = \App\Models\DistributorV2::find($distributorId);
+            $hrAccountId = $hrAccountId ?? $distributor?->hr_account_id;
+            $hrCompanyId = $hrCompanyId ?? $distributor?->hr_company_id;
+        }
+
         return url('/admin/hr-company-license-details?' . http_build_query([
             'handoverId' => $record->handover_id,
             'hrAccountId' => $hrAccountId,

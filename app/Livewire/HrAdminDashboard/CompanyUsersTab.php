@@ -88,23 +88,28 @@ class CompanyUsersTab extends Component implements HasForms, HasTable
             ];
         });
 
-        // Reseller fallback: no SoftwareHandover means no rows in the Customer
-        // table. The CRM-side admin user (created by createAccount during the
-        // approval flow) lives on the reseller_v2 row itself. Synthesize a
-        // single OWNER user entry so the Users tab reflects who can log in.
+        // Reseller / Distributor fallback: no SoftwareHandover means no rows
+        // in the Customer table. The CRM-side admin user (created by
+        // createAccount during the approval flow) lives on the reseller_v2 /
+        // distributor_v2 row itself. Synthesize a single OWNER user entry so
+        // the Users tab reflects who can log in.
         if ($this->users->isEmpty()) {
-            $reseller = $this->companyData['reseller_v2'] ?? null;
-            if ($reseller) {
-                $modules = is_array($reseller->modules) ? $reseller->modules : [];
+            $partner = $this->companyData['reseller_v2']
+                ?? $this->companyData['distributor_v2']
+                ?? null;
+            if ($partner) {
+                $modules = is_array($partner->modules) ? $partner->modules : [];
 
                 $this->users = collect([[
-                    'id' => $reseller->id,
-                    'backend_user_id' => $this->companyData['hr_user_id'] ?? '-',
-                    'full_name' => $reseller->name ?? '-',
-                    'login_id' => $reseller->email,
-                    'password' => $reseller->plain_password ?? '-',
+                    'id' => $partner->id,
+                    'backend_user_id' => $this->companyData['hr_user_id']
+                        ?? $partner->hr_user_id
+                        ?? '-',
+                    'full_name' => $partner->name ?? '-',
+                    'login_id' => $partner->email,
+                    'password' => $partner->plain_password ?? '-',
                     'role' => 'OWNER',
-                    'status' => $reseller->status ?? 'Active',
+                    'status' => $partner->status ?? 'Active',
                     'ta' => in_array('attendance', $modules, true),
                     'tl' => in_array('leave', $modules, true),
                     'tc' => in_array('claim', $modules, true),

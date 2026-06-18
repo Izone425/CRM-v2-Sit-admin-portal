@@ -11,7 +11,7 @@ class HrDistributors extends Page
     protected static string $view = 'filament.pages.hr-distributors';
     protected static ?string $navigationLabel = 'Distributor';
     protected static ?string $title = 'Distributor';
-    protected static bool $shouldRegisterNavigation = false;
+    protected static bool $shouldRegisterNavigation = true;
     protected static ?string $slug = 'hr-distributors';
 
     public string $activeTab = 'all';
