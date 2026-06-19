@@ -94,13 +94,13 @@
         }
 
         .reseller-table thead th {
-            background: #f9fafb;
+            background: #1a56db;
             padding: 12px 16px;
             text-align: left;
             font-weight: 600;
             font-size: 13px;
-            color: #374151;
-            border-bottom: 2px solid #e5e7eb;
+            color: #ffffff;
+            border-bottom: none;
         }
 
         .reseller-table thead th:nth-child(1) {
@@ -164,6 +164,33 @@
 
         .reseller-table tbody td:nth-child(5) {
             text-align: center;
+        }
+
+        /* Year-month group header (Tier 1) — mirrors Termination Analysis's collapsible rows. */
+        .reseller-chevron { transition: transform 0.2s ease; }
+        .reseller-chevron.open { transform: rotate(90deg); }
+        /* Reseller row chevron (Tier 2 → inline clients) + tinted clients-row band. */
+        .reseller-row-chevron { transition: transform 0.2s ease; }
+        .reseller-row-chevron.open { transform: rotate(90deg); }
+        .reseller-table tbody tr.reseller-clients-row > td {
+            /* padding-left aligns the inline client list with the reseller-name TEXT column 3 text-start position.
+               Sum of: #-col (60) + Account-col (90) + cell padding-left (16) + chevron width (14) + chevron margin-right (8) = 188.
+               If any of those four fixed widths change, recompute this constant. */
+            padding-left: 188px;
+            text-align: left;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .reseller-table tbody td.reseller-name { user-select: none; }
+        .reseller-table tbody tr.reseller-group-row {
+            background: #f8fafc;
+            cursor: pointer;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .reseller-table tbody tr.reseller-group-row:hover {
+            background: #f1f5f9;
+        }
+        .reseller-table tbody tr.reseller-group-row > td {
+            padding: 14px 20px;
         }
 
         .account-icon {
@@ -804,6 +831,65 @@
                 </div>
             </div>
 
+            {{-- Summary cards — mirror Termination Analysis (date+totals / reseller type / 4 HR modules) --}}
+            @php
+                $moduleColors = ['TA' => '#3b82f6', 'TL' => '#8b5cf6', 'TC' => '#f59e0b', 'TP' => '#10b981'];
+                $moduleLabels = ['TA' => 'Attendance', 'TL' => 'Leave', 'TC' => 'Claim', 'TP' => 'Payroll'];
+            @endphp
+            <div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:16px;">
+                {{-- Card 1: Date range + totals --}}
+                <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:20px 24px; flex:1.2; min-width:240px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+                    <p style="font-size:0.7rem; color:#9ca3af; margin:0;">
+                        {{ \Carbon\Carbon::parse($myrStartDate)->format('d M Y') }} – {{ \Carbon\Carbon::parse($myrEndDate)->format('d M Y') }}
+                    </p>
+                    <div style="display:flex; align-items:baseline; gap:20px; margin:6px 0 0; flex-wrap:wrap;">
+                        <p style="font-size:1.85rem; font-weight:700; color:#dc2626; margin:0;">
+                            {{ number_format(count($myrData)) }}
+                            <span style="font-size:0.8rem; font-weight:600; color:#6b7280;">resellers</span>
+                        </p>
+                        <p style="font-size:1.85rem; font-weight:700; color:#f59e0b; margin:0;">
+                            {{ number_format($myrTotalEndUsers) }}
+                            <span style="font-size:0.8rem; font-weight:600; color:#6b7280;">clients</span>
+                        </p>
+                        <p style="font-size:1.85rem; font-weight:700; color:#2563eb; margin:0;">
+                            {{ number_format(array_sum(array_column($myrData, 'total_hc'))) }}
+                            <span style="font-size:0.8rem; font-weight:600; color:#6b7280;">headcount</span>
+                        </p>
+                    </div>
+                </div>
+
+                {{-- Card 2: Reseller type breakdown --}}
+                <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:16px 24px; flex:0.8; min-width:240px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+                    <p style="font-size:0.8rem; color:#6b7280; margin:0; font-weight:600;">{{ number_format(count($myrData)) }} Reseller{{ count($myrData) === 1 ? '' : 's' }}</p>
+                    <div style="display:flex; align-items:center; margin-top:8px; justify-content:space-around;">
+                        <div style="text-align:center; flex:1;">
+                            <span style="font-size:1.85rem; font-weight:700; color:#10b981;">{{ $myrSummary['categories']['end_user'] ?? 0 }}</span>
+                            <p style="font-size:0.7rem; color:#475569; margin:2px 0 0;">End User</p>
+                        </div>
+                        <div style="text-align:center; flex:1;">
+                            <span style="font-size:1.85rem; font-weight:700; color:#2563eb;">{{ $myrSummary['categories']['dealer'] ?? 0 }}</span>
+                            <p style="font-size:0.7rem; color:#475569; margin:2px 0 0;">Dealer</p>
+                        </div>
+                        <div style="text-align:center; flex:1;">
+                            <span style="font-size:1.85rem; font-weight:700; color:#7c3aed;">{{ $myrSummary['categories']['distributor'] ?? 0 }}</span>
+                            <p style="font-size:0.7rem; color:#475569; margin:2px 0 0;">Distributor</p>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Cards 3-6: HR module penetration across client portfolio --}}
+                @foreach(['TA', 'TL', 'TC', 'TP'] as $mod)
+                    <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:16px 20px; min-width:140px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+                        <p style="font-size:0.75rem; color:#6b7280; margin:0; font-weight:600;">{{ $moduleLabels[$mod] }}</p>
+                        <p style="font-size:0.8rem; color:#9ca3af; margin:2px 0 0;">{{ number_format($myrSummary['modules'][$mod]['headcount'] ?? 0) }} headcount</p>
+                        <div style="display:flex; align-items:baseline; gap:6px; margin-top:4px;">
+                            <span style="font-size:1.85rem; font-weight:700; color:{{ $moduleColors[$mod] }};">{{ $myrSummary['modules'][$mod]['companies'] ?? 0 }}</span>
+                            <span style="font-size:0.8rem; font-weight:600; color:#6b7280;">company</span>
+                        </div>
+                    </div>
+                @endforeach
+            </div>
+
             <table class="reseller-table">
                 <thead>
                     <tr>
@@ -816,60 +902,110 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @forelse ($myrData as $index => $reseller)
-                        <tr x-show="accountFilter === 'all' || (accountFilter === 'registered' && {{ ($reseller['has_account'] ?? false) ? 'true' : 'false' }}) || (accountFilter === 'unregistered' && !{{ ($reseller['has_account'] ?? false) ? 'true' : 'false' }})">
-                            <td>{{ $index + 1 }}</td>
-                            <td>
-                                @if ($reseller['has_account'] ?? false)
-                                    <span class="account-icon has-account" title="Registered in Reseller Portal">✓</span>
-                                @else
-                                    <span class="account-icon no-account" title="Not registered in Reseller Portal">✗</span>
-                                @endif
-                            </td>
-                            <td class="reseller-name">{{ strtoupper($reseller['reseller_name']) }}</td>
-                            <td>
-                                <span style="display:inline-flex; align-items:center; gap:4px; font-weight:600; color:#16a34a;">
-                                    <svg style="width:12px; height:12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    @php $myrGrouped = $this->groupByYearMonth($myrData); @endphp
+                    @forelse ($myrGrouped as $yearMonth => $group)
+                        {{-- Tier 1: Year-month header --}}
+                        <tr class="reseller-group-row" wire:click="toggleYearMonth('{{ $yearMonth }}')">
+                            <td colspan="6">
+                                <div style="display:flex; align-items:center; gap:12px;">
+                                    <svg class="reseller-chevron {{ in_array($yearMonth, $expandedYearMonths) ? 'open' : '' }}" style="width:18px; height:18px; color:#475569; flex-shrink:0;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
                                     </svg>
-                                    RM {{ number_format($reseller['total_forecast_cost'] ?? 0) }}
-                                </span>
-                            </td>
-                            <td>
-                                <span class="end-user-count"
-                                    wire:click="openResellerDrawer('{{ addslashes($reseller['reseller_name']) }}', 'MYR')"
-                                    title="Click to view clients">
-                                    {{ number_format($reseller['total_end_users']) }}
-                                </span>
-                            </td>
-                            <td>
-                                <div style="display: inline-flex; gap: 6px; align-items: center;">
-                                    <button wire:click="exportResellerToExcel('{{ addslashes($reseller['reseller_name']) }}', 'MYR')"
-                                        class="drawer-export-btn"
-                                        title="Customer Analysis"
-                                        wire:loading.attr="disabled"
-                                        wire:target="exportResellerToExcel('{{ addslashes($reseller['reseller_name']) }}', 'MYR')">
-                                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" wire:loading.remove wire:target="exportResellerToExcel('{{ addslashes($reseller['reseller_name']) }}', 'MYR')">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                                        </svg>
-                                        <span wire:loading wire:target="exportResellerToExcel('{{ addslashes($reseller['reseller_name']) }}', 'MYR')">...</span>
-                                    </button>
-                                    <button wire:click="exportResellerPricingToExcel('{{ addslashes($reseller['reseller_name']) }}', 'MYR')"
-                                        class="drawer-export-btn pricing-export-btn"
-                                        title="Pricing Analysis"
-                                        wire:loading.attr="disabled"
-                                        wire:target="exportResellerPricingToExcel('{{ addslashes($reseller['reseller_name']) }}', 'MYR')">
-                                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" wire:loading.remove wire:target="exportResellerPricingToExcel('{{ addslashes($reseller['reseller_name']) }}', 'MYR')">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                                        </svg>
-                                        <span wire:loading wire:target="exportResellerPricingToExcel('{{ addslashes($reseller['reseller_name']) }}', 'MYR')">...</span>
-                                    </button>
+                                    <span style="font-weight:700; font-size:0.95rem; color:#1a56db;">{{ $group['label'] }}</span>
+                                    <span style="margin-left:auto; background:#fef2f2; color:#dc2626; padding:2px 10px; border-radius:9999px; font-size:0.75rem; font-weight:600;">
+                                        {{ $group['count'] }} {{ $group['count'] === 1 ? 'reseller' : 'resellers' }}
+                                    </span>
+                                    <span style="font-size:0.8rem; font-weight:600; color:#475569;">
+                                        {{ number_format($group['total_hc']) }} HC
+                                    </span>
                                 </div>
                             </td>
                         </tr>
+                        {{-- Tier 2: Reseller rows in this month --}}
+                        @if (in_array($yearMonth, $expandedYearMonths))
+                            @foreach ($group['resellers'] as $localIndex => $reseller)
+                                <tr x-show="accountFilter === 'all' || (accountFilter === 'registered' && {{ ($reseller['has_account'] ?? false) ? 'true' : 'false' }}) || (accountFilter === 'unregistered' && !{{ ($reseller['has_account'] ?? false) ? 'true' : 'false' }})">
+                                    <td>{{ $localIndex + 1 }}</td>
+                                    <td>
+                                        @if ($reseller['has_account'] ?? false)
+                                            <span class="account-icon has-account" title="Registered in Reseller Portal">✓</span>
+                                        @else
+                                            <span class="account-icon no-account" title="Not registered in Reseller Portal">✗</span>
+                                        @endif
+                                    </td>
+                                    <td class="reseller-name" wire:click="toggleResellerExpansion('{{ addslashes($reseller['reseller_name']) }}', 'MYR')" style="cursor:pointer;">
+                                        <svg class="reseller-row-chevron {{ in_array($reseller['reseller_name'], $expandedResellersMyr) ? 'open' : '' }}" style="display:inline-block; width:14px; height:14px; color:#6b7280; vertical-align:middle; margin-right:8px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                        </svg>
+                                        {{ strtoupper($reseller['reseller_name']) }}
+                                    </td>
+                                    <td>
+                                        <span style="display:inline-flex; align-items:center; gap:4px; font-weight:600; color:#16a34a;">
+                                            <svg style="width:12px; height:12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                            </svg>
+                                            RM {{ number_format($reseller['total_forecast_cost'] ?? 0) }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="end-user-count"
+                                            wire:click="openResellerDrawer('{{ addslashes($reseller['reseller_name']) }}', 'MYR')"
+                                            title="Click to view clients">
+                                            {{ number_format($reseller['total_end_users']) }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <div style="display: inline-flex; gap: 6px; align-items: center;">
+                                            <button wire:click="exportResellerToExcel('{{ addslashes($reseller['reseller_name']) }}', 'MYR')"
+                                                class="drawer-export-btn"
+                                                title="Customer Analysis"
+                                                wire:loading.attr="disabled"
+                                                wire:target="exportResellerToExcel('{{ addslashes($reseller['reseller_name']) }}', 'MYR')">
+                                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" wire:loading.remove wire:target="exportResellerToExcel('{{ addslashes($reseller['reseller_name']) }}', 'MYR')">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                                </svg>
+                                                <span wire:loading wire:target="exportResellerToExcel('{{ addslashes($reseller['reseller_name']) }}', 'MYR')">...</span>
+                                            </button>
+                                            <button wire:click="exportResellerPricingToExcel('{{ addslashes($reseller['reseller_name']) }}', 'MYR')"
+                                                class="drawer-export-btn pricing-export-btn"
+                                                title="Pricing Analysis"
+                                                wire:loading.attr="disabled"
+                                                wire:target="exportResellerPricingToExcel('{{ addslashes($reseller['reseller_name']) }}', 'MYR')">
+                                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" wire:loading.remove wire:target="exportResellerPricingToExcel('{{ addslashes($reseller['reseller_name']) }}', 'MYR')">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                                </svg>
+                                                <span wire:loading wire:target="exportResellerPricingToExcel('{{ addslashes($reseller['reseller_name']) }}', 'MYR')">...</span>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                @if (in_array($reseller['reseller_name'], $expandedResellersMyr))
+                                    <tr class="reseller-clients-row">
+                                        <td colspan="6" style="background:#fafbfc; padding-top:12px; padding-right:16px; padding-bottom:12px;">
+                                            @php $clients = $this->getResellerClientsCompact($reseller['reseller_name'], 'MYR'); @endphp
+                                            @forelse ($clients as $client)
+                                                <div style="display:flex; align-items:center; gap:12px; padding:6px 0; border-bottom:1px solid #f3f4f6;">
+                                                    <span style="flex:1; font-size:0.8rem; color:#1f2937; font-weight:500;">
+                                                        {{ strtoupper($client['company_name']) }}
+                                                    </span>
+                                                    <span style="font-size:0.7rem; background:#dbeafe; color:#1e40af; padding:2px 10px; border-radius:9999px; font-weight:600; white-space:nowrap;">
+                                                        HC {{ number_format($client['total_hc']) }}
+                                                    </span>
+                                                    <span style="font-size:0.7rem; background:#dcfce7; color:#166534; padding:2px 10px; border-radius:9999px; font-weight:600; white-space:nowrap;">
+                                                        RM {{ number_format($client['total_forecast_cost']) }}
+                                                    </span>
+                                                </div>
+                                            @empty
+                                                <div style="font-size:0.8rem; color:#9ca3af; padding:6px 0;">No clients in the current window.</div>
+                                            @endforelse
+                                        </td>
+                                    </tr>
+                                @endif
+                            @endforeach
+                        @endif
                     @empty
                         <tr>
-                            <td colspan="5" style="text-align:center; padding:20px; color:#9ca3af;">No reseller data found</td>
+                            <td colspan="6" style="text-align:center; padding:20px; color:#9ca3af;">No reseller data found</td>
                         </tr>
                     @endforelse
                     @if (!empty($myrData))
@@ -982,6 +1118,65 @@
                 </div>
             </div>
 
+            {{-- Summary cards — mirror Termination Analysis (date+totals / reseller type / 4 HR modules) --}}
+            @php
+                $moduleColors = ['TA' => '#3b82f6', 'TL' => '#8b5cf6', 'TC' => '#f59e0b', 'TP' => '#10b981'];
+                $moduleLabels = ['TA' => 'Attendance', 'TL' => 'Leave', 'TC' => 'Claim', 'TP' => 'Payroll'];
+            @endphp
+            <div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:16px;">
+                {{-- Card 1: Date range + totals --}}
+                <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:20px 24px; flex:1.2; min-width:240px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+                    <p style="font-size:0.7rem; color:#9ca3af; margin:0;">
+                        {{ \Carbon\Carbon::parse($usdStartDate)->format('d M Y') }} – {{ \Carbon\Carbon::parse($usdEndDate)->format('d M Y') }}
+                    </p>
+                    <div style="display:flex; align-items:baseline; gap:20px; margin:6px 0 0; flex-wrap:wrap;">
+                        <p style="font-size:1.85rem; font-weight:700; color:#dc2626; margin:0;">
+                            {{ number_format(count($usdData)) }}
+                            <span style="font-size:0.8rem; font-weight:600; color:#6b7280;">resellers</span>
+                        </p>
+                        <p style="font-size:1.85rem; font-weight:700; color:#f59e0b; margin:0;">
+                            {{ number_format($usdTotalEndUsers) }}
+                            <span style="font-size:0.8rem; font-weight:600; color:#6b7280;">clients</span>
+                        </p>
+                        <p style="font-size:1.85rem; font-weight:700; color:#2563eb; margin:0;">
+                            {{ number_format(array_sum(array_column($usdData, 'total_hc'))) }}
+                            <span style="font-size:0.8rem; font-weight:600; color:#6b7280;">headcount</span>
+                        </p>
+                    </div>
+                </div>
+
+                {{-- Card 2: Reseller type breakdown --}}
+                <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:16px 24px; flex:0.8; min-width:240px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+                    <p style="font-size:0.8rem; color:#6b7280; margin:0; font-weight:600;">{{ number_format(count($usdData)) }} Reseller{{ count($usdData) === 1 ? '' : 's' }}</p>
+                    <div style="display:flex; align-items:center; margin-top:8px; justify-content:space-around;">
+                        <div style="text-align:center; flex:1;">
+                            <span style="font-size:1.85rem; font-weight:700; color:#10b981;">{{ $usdSummary['categories']['end_user'] ?? 0 }}</span>
+                            <p style="font-size:0.7rem; color:#475569; margin:2px 0 0;">End User</p>
+                        </div>
+                        <div style="text-align:center; flex:1;">
+                            <span style="font-size:1.85rem; font-weight:700; color:#2563eb;">{{ $usdSummary['categories']['dealer'] ?? 0 }}</span>
+                            <p style="font-size:0.7rem; color:#475569; margin:2px 0 0;">Dealer</p>
+                        </div>
+                        <div style="text-align:center; flex:1;">
+                            <span style="font-size:1.85rem; font-weight:700; color:#7c3aed;">{{ $usdSummary['categories']['distributor'] ?? 0 }}</span>
+                            <p style="font-size:0.7rem; color:#475569; margin:2px 0 0;">Distributor</p>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Cards 3-6: HR module penetration across client portfolio --}}
+                @foreach(['TA', 'TL', 'TC', 'TP'] as $mod)
+                    <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:16px 20px; min-width:140px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+                        <p style="font-size:0.75rem; color:#6b7280; margin:0; font-weight:600;">{{ $moduleLabels[$mod] }}</p>
+                        <p style="font-size:0.8rem; color:#9ca3af; margin:2px 0 0;">{{ number_format($usdSummary['modules'][$mod]['headcount'] ?? 0) }} headcount</p>
+                        <div style="display:flex; align-items:baseline; gap:6px; margin-top:4px;">
+                            <span style="font-size:1.85rem; font-weight:700; color:{{ $moduleColors[$mod] }};">{{ $usdSummary['modules'][$mod]['companies'] ?? 0 }}</span>
+                            <span style="font-size:0.8rem; font-weight:600; color:#6b7280;">company</span>
+                        </div>
+                    </div>
+                @endforeach
+            </div>
+
             <table class="reseller-table">
                 <thead>
                     <tr>
@@ -994,60 +1189,110 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @forelse ($usdData as $index => $reseller)
-                        <tr x-show="accountFilter === 'all' || (accountFilter === 'registered' && {{ ($reseller['has_account'] ?? false) ? 'true' : 'false' }}) || (accountFilter === 'unregistered' && !{{ ($reseller['has_account'] ?? false) ? 'true' : 'false' }})">
-                            <td>{{ $index + 1 }}</td>
-                            <td>
-                                @if ($reseller['has_account'] ?? false)
-                                    <span class="account-icon has-account" title="Registered in Reseller Portal">✓</span>
-                                @else
-                                    <span class="account-icon no-account" title="Not registered in Reseller Portal">✗</span>
-                                @endif
-                            </td>
-                            <td class="reseller-name">{{ strtoupper($reseller['reseller_name']) }}</td>
-                            <td>
-                                <span style="display:inline-flex; align-items:center; gap:4px; font-weight:600; color:#16a34a;">
-                                    <svg style="width:12px; height:12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    @php $usdGrouped = $this->groupByYearMonth($usdData); @endphp
+                    @forelse ($usdGrouped as $yearMonth => $group)
+                        {{-- Tier 1: Year-month header --}}
+                        <tr class="reseller-group-row" wire:click="toggleYearMonth('{{ $yearMonth }}')">
+                            <td colspan="6">
+                                <div style="display:flex; align-items:center; gap:12px;">
+                                    <svg class="reseller-chevron {{ in_array($yearMonth, $expandedYearMonths) ? 'open' : '' }}" style="width:18px; height:18px; color:#475569; flex-shrink:0;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
                                     </svg>
-                                    USD {{ number_format($reseller['total_forecast_cost'] ?? 0) }}
-                                </span>
-                            </td>
-                            <td>
-                                <span class="end-user-count"
-                                    wire:click="openResellerDrawer('{{ addslashes($reseller['reseller_name']) }}', 'USD')"
-                                    title="Click to view clients">
-                                    {{ number_format($reseller['total_end_users']) }}
-                                </span>
-                            </td>
-                            <td>
-                                <div style="display: inline-flex; gap: 6px; align-items: center;">
-                                    <button wire:click="exportResellerToExcel('{{ addslashes($reseller['reseller_name']) }}', 'USD')"
-                                        class="drawer-export-btn"
-                                        title="Customer Analysis"
-                                        wire:loading.attr="disabled"
-                                        wire:target="exportResellerToExcel('{{ addslashes($reseller['reseller_name']) }}', 'USD')">
-                                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" wire:loading.remove wire:target="exportResellerToExcel('{{ addslashes($reseller['reseller_name']) }}', 'USD')">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                                        </svg>
-                                        <span wire:loading wire:target="exportResellerToExcel('{{ addslashes($reseller['reseller_name']) }}', 'USD')">...</span>
-                                    </button>
-                                    <button wire:click="exportResellerPricingToExcel('{{ addslashes($reseller['reseller_name']) }}', 'USD')"
-                                        class="drawer-export-btn pricing-export-btn"
-                                        title="Pricing Analysis"
-                                        wire:loading.attr="disabled"
-                                        wire:target="exportResellerPricingToExcel('{{ addslashes($reseller['reseller_name']) }}', 'USD')">
-                                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" wire:loading.remove wire:target="exportResellerPricingToExcel('{{ addslashes($reseller['reseller_name']) }}', 'USD')">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                                        </svg>
-                                        <span wire:loading wire:target="exportResellerPricingToExcel('{{ addslashes($reseller['reseller_name']) }}', 'USD')">...</span>
-                                    </button>
+                                    <span style="font-weight:700; font-size:0.95rem; color:#1a56db;">{{ $group['label'] }}</span>
+                                    <span style="margin-left:auto; background:#fef2f2; color:#dc2626; padding:2px 10px; border-radius:9999px; font-size:0.75rem; font-weight:600;">
+                                        {{ $group['count'] }} {{ $group['count'] === 1 ? 'reseller' : 'resellers' }}
+                                    </span>
+                                    <span style="font-size:0.8rem; font-weight:600; color:#475569;">
+                                        {{ number_format($group['total_hc']) }} HC
+                                    </span>
                                 </div>
                             </td>
                         </tr>
+                        {{-- Tier 2: Reseller rows in this month --}}
+                        @if (in_array($yearMonth, $expandedYearMonths))
+                            @foreach ($group['resellers'] as $localIndex => $reseller)
+                                <tr x-show="accountFilter === 'all' || (accountFilter === 'registered' && {{ ($reseller['has_account'] ?? false) ? 'true' : 'false' }}) || (accountFilter === 'unregistered' && !{{ ($reseller['has_account'] ?? false) ? 'true' : 'false' }})">
+                                    <td>{{ $localIndex + 1 }}</td>
+                                    <td>
+                                        @if ($reseller['has_account'] ?? false)
+                                            <span class="account-icon has-account" title="Registered in Reseller Portal">✓</span>
+                                        @else
+                                            <span class="account-icon no-account" title="Not registered in Reseller Portal">✗</span>
+                                        @endif
+                                    </td>
+                                    <td class="reseller-name" wire:click="toggleResellerExpansion('{{ addslashes($reseller['reseller_name']) }}', 'USD')" style="cursor:pointer;">
+                                        <svg class="reseller-row-chevron {{ in_array($reseller['reseller_name'], $expandedResellersUsd) ? 'open' : '' }}" style="display:inline-block; width:14px; height:14px; color:#6b7280; vertical-align:middle; margin-right:8px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                        </svg>
+                                        {{ strtoupper($reseller['reseller_name']) }}
+                                    </td>
+                                    <td>
+                                        <span style="display:inline-flex; align-items:center; gap:4px; font-weight:600; color:#16a34a;">
+                                            <svg style="width:12px; height:12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                            </svg>
+                                            USD {{ number_format($reseller['total_forecast_cost'] ?? 0) }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="end-user-count"
+                                            wire:click="openResellerDrawer('{{ addslashes($reseller['reseller_name']) }}', 'USD')"
+                                            title="Click to view clients">
+                                            {{ number_format($reseller['total_end_users']) }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <div style="display: inline-flex; gap: 6px; align-items: center;">
+                                            <button wire:click="exportResellerToExcel('{{ addslashes($reseller['reseller_name']) }}', 'USD')"
+                                                class="drawer-export-btn"
+                                                title="Customer Analysis"
+                                                wire:loading.attr="disabled"
+                                                wire:target="exportResellerToExcel('{{ addslashes($reseller['reseller_name']) }}', 'USD')">
+                                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" wire:loading.remove wire:target="exportResellerToExcel('{{ addslashes($reseller['reseller_name']) }}', 'USD')">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                                </svg>
+                                                <span wire:loading wire:target="exportResellerToExcel('{{ addslashes($reseller['reseller_name']) }}', 'USD')">...</span>
+                                            </button>
+                                            <button wire:click="exportResellerPricingToExcel('{{ addslashes($reseller['reseller_name']) }}', 'USD')"
+                                                class="drawer-export-btn pricing-export-btn"
+                                                title="Pricing Analysis"
+                                                wire:loading.attr="disabled"
+                                                wire:target="exportResellerPricingToExcel('{{ addslashes($reseller['reseller_name']) }}', 'USD')">
+                                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" wire:loading.remove wire:target="exportResellerPricingToExcel('{{ addslashes($reseller['reseller_name']) }}', 'USD')">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                                </svg>
+                                                <span wire:loading wire:target="exportResellerPricingToExcel('{{ addslashes($reseller['reseller_name']) }}', 'USD')">...</span>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                @if (in_array($reseller['reseller_name'], $expandedResellersUsd))
+                                    <tr class="reseller-clients-row">
+                                        <td colspan="6" style="background:#fafbfc; padding-top:12px; padding-right:16px; padding-bottom:12px;">
+                                            @php $clients = $this->getResellerClientsCompact($reseller['reseller_name'], 'USD'); @endphp
+                                            @forelse ($clients as $client)
+                                                <div style="display:flex; align-items:center; gap:12px; padding:6px 0; border-bottom:1px solid #f3f4f6;">
+                                                    <span style="flex:1; font-size:0.8rem; color:#1f2937; font-weight:500;">
+                                                        {{ strtoupper($client['company_name']) }}
+                                                    </span>
+                                                    <span style="font-size:0.7rem; background:#dbeafe; color:#1e40af; padding:2px 10px; border-radius:9999px; font-weight:600; white-space:nowrap;">
+                                                        HC {{ number_format($client['total_hc']) }}
+                                                    </span>
+                                                    <span style="font-size:0.7rem; background:#dcfce7; color:#166534; padding:2px 10px; border-radius:9999px; font-weight:600; white-space:nowrap;">
+                                                        USD {{ number_format($client['total_forecast_cost']) }}
+                                                    </span>
+                                                </div>
+                                            @empty
+                                                <div style="font-size:0.8rem; color:#9ca3af; padding:6px 0;">No clients in the current window.</div>
+                                            @endforelse
+                                        </td>
+                                    </tr>
+                                @endif
+                            @endforeach
+                        @endif
                     @empty
                         <tr>
-                            <td colspan="5" style="text-align:center; padding:20px; color:#9ca3af;">No reseller data found</td>
+                            <td colspan="6" style="text-align:center; padding:20px; color:#9ca3af;">No reseller data found</td>
                         </tr>
                     @endforelse
                     @if (!empty($usdData))

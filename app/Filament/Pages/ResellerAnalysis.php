@@ -26,6 +26,18 @@ class ResellerAnalysis extends Page
     public $myrData = [];
     public $usdData = [];
 
+    // Summary aggregates per currency — category breakdown + HR module penetration
+    // for the top-of-tab card row (mirrors Termination Analysis's cards 2–6).
+    public $myrSummary = [];
+    public $usdSummary = [];
+
+    // Year-month groups currently expanded in the reseller list (shared between MYR + USD tabs).
+    public array $expandedYearMonths = [];
+
+    // Reseller rows currently expanded inline (per-tab — a reseller can appear in both currencies).
+    public array $expandedResellersMyr = [];
+    public array $expandedResellersUsd = [];
+
     // Date range selector — mirrors Termination Analysis / Renewal Process Data tabs.
     public string $filterMode = 'all';
     public string $selectedYear = '';
@@ -72,6 +84,9 @@ class ResellerAnalysis extends Page
 
         $this->myrData = $this->getResellerData('MYR');
         $this->usdData = $this->getResellerData('USD');
+        $this->myrSummary = $this->getCurrencySummary('MYR');
+        $this->usdSummary = $this->getCurrencySummary('USD');
+        $this->expandedYearMonths = $this->collectAllGroupKeys();
         $this->commissionData = [
             'MYR' => $this->getResellerCommissionData('MYR'),
             'USD' => $this->getResellerCommissionData('USD'),
@@ -641,6 +656,11 @@ class ResellerAnalysis extends Page
     {
         $this->myrData = $this->getResellerData('MYR');
         $this->usdData = $this->getResellerData('USD');
+        $this->myrSummary = $this->getCurrencySummary('MYR');
+        $this->usdSummary = $this->getCurrencySummary('USD');
+        $this->expandedYearMonths = $this->collectAllGroupKeys();
+        $this->expandedResellersMyr = [];
+        $this->expandedResellersUsd = [];
     }
 
     /**
@@ -716,14 +736,17 @@ class ResellerAnalysis extends Page
             }
 
             $licensesQuery = $this->buildExclusionQuery($licensesQuery);
-            // Per-company HC sum in the date range; keys also serve as the "has licenses" set
-            // (replaces the prior distinct() pluck). Reused below to compute per-reseller HC + forecast.
-            $companyHcMap = $licensesQuery
-                ->selectRaw('f_company_id, SUM(f_unit) as total_hc')
+            // Per-company HC sum + earliest expiry within the date range. Keys serve as the
+            // "has licenses" set; earliest_expiry powers the year-month grouping above the table.
+            $companyData = $licensesQuery
+                ->selectRaw('f_company_id, SUM(f_unit) as total_hc, MIN(f_expiry_date) as earliest_expiry')
                 ->groupBy('f_company_id')
-                ->pluck('total_hc', 'f_company_id')
+                ->get()
+                ->mapWithKeys(fn ($r) => [$r->f_company_id => [
+                    'total_hc' => (int) $r->total_hc,
+                    'earliest_expiry' => $r->earliest_expiry,
+                ]])
                 ->toArray();
-            $companiesWithLicensesSet = $companyHcMap;
 
             // Batch fetch registered reseller IDs and codes from reseller_v2
             $resellerV2Data = \App\Models\ResellerV2::whereNotNull('reseller_id')
@@ -738,11 +761,15 @@ class ResellerAnalysis extends Page
                 $resellerId = $companies->first()->reseller_id;
                 $totalClients = 0;
                 $totalHc = 0;
+                $earliest = null;
 
                 foreach ($companyIds as $companyId) {
-                    if (isset($companyHcMap[$companyId])) {
-                        $totalClients++;
-                        $totalHc += (int) $companyHcMap[$companyId];
+                    if (!isset($companyData[$companyId])) continue;
+                    $totalClients++;
+                    $totalHc += $companyData[$companyId]['total_hc'];
+                    $exp = $companyData[$companyId]['earliest_expiry'];
+                    if ($exp && (!$earliest || $exp < $earliest)) {
+                        $earliest = $exp;
                     }
                 }
 
@@ -757,6 +784,7 @@ class ResellerAnalysis extends Page
                         'has_account' => isset($registeredResellerIds[$resellerId]),
                         'debtor_code' => $rv2->debtor_code ?? '',
                         'creditor_code' => $rv2->creditor_code ?? '',
+                        'earliest_expiry' => $earliest,  // YYYY-MM-DD or null; drives the year-month grouping
                     ];
                 }
             }
@@ -766,6 +794,254 @@ class ResellerAnalysis extends Page
             return $result;
         } catch (\Exception $e) {
             Log::error('Error fetching reseller data: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Summary aggregates for the cards row above the reseller table — mirrors
+     * Termination Analysis's category breakdown + HR module penetration cards,
+     * scoped to the resellers/clients in the given currency.
+     *
+     *   categories.{end_user,dealer,distributor} = unique resellers by their own
+     *       f_company_type (sum equals count of resellers shown in $myrData/$usdData).
+     *   modules.{TA,TL,TC,TP} = {headcount, companies} across the client portfolio,
+     *       using f_unit for HC (same column the reseller table sums).
+     */
+    public function getCurrencySummary(string $currency): array
+    {
+        $empty = [
+            'categories' => ['end_user' => 0, 'dealer' => 0, 'distributor' => 0],
+            'modules' => array_fill_keys(['TA', 'TL', 'TC', 'TP'], ['headcount' => 0, 'companies' => 0]),
+        ];
+
+        try {
+            [$startDate, $endDate] = $this->getDateRange();
+
+            $resellers = DB::connection('frontenddb')
+                ->table('crm_reseller_link as rl')
+                ->leftJoin('crm_customer as r', 'rl.reseller_id', '=', 'r.company_id')
+                ->select('rl.reseller_name', 'rl.reseller_id', 'rl.f_id', 'r.f_company_type as reseller_type')
+                ->whereNotNull('rl.reseller_name')
+                ->where('rl.reseller_name', '!=', '')
+                ->get();
+
+            $allCompanyIds = $resellers->pluck('f_id')->unique()->filter()->values()->toArray();
+            if (empty($allCompanyIds)) {
+                return $empty;
+            }
+
+            $myrOverrideCompanyIds = DB::connection('frontenddb')
+                ->table('crm_reseller_link')
+                ->whereIn('reseller_id', self::$myrOverrideResellerIds)
+                ->pluck('f_id')
+                ->toArray();
+
+            $licQ = DB::connection('frontenddb')->table('crm_expiring_license')
+                ->whereIn('f_company_id', $allCompanyIds)
+                ->where('f_expiry_date', '>=', $startDate)
+                ->where('f_expiry_date', '<=', $endDate);
+
+            if ($currency === 'MYR' && !empty($myrOverrideCompanyIds)) {
+                $licQ->where(function ($q) use ($myrOverrideCompanyIds) {
+                    $q->where('f_currency', 'MYR')
+                      ->orWhereIn('f_company_id', $myrOverrideCompanyIds);
+                });
+            } elseif ($currency === 'USD' && !empty($myrOverrideCompanyIds)) {
+                $licQ->where('f_currency', 'USD')
+                     ->whereNotIn('f_company_id', $myrOverrideCompanyIds);
+            } else {
+                $licQ->where('f_currency', $currency);
+            }
+            $licQ = $this->buildExclusionQuery($licQ);
+
+            $clientCompanyIds = $licQ->distinct()->pluck('f_company_id')->toArray();
+            if (empty($clientCompanyIds)) {
+                return $empty;
+            }
+            $clientIdSet = array_flip($clientCompanyIds);
+
+            // Card 2 — categorize by reseller's own type (group by name so the sum
+            // matches count($myrData) which also groups by reseller_name).
+            $resellerNameToType = [];
+            foreach ($resellers as $row) {
+                if (!isset($clientIdSet[$row->f_id])) continue;
+                if (!isset($resellerNameToType[$row->reseller_name])) {
+                    $resellerNameToType[$row->reseller_name] = strtoupper($row->reseller_type ?? '');
+                }
+            }
+            $categories = ['end_user' => 0, 'dealer' => 0, 'distributor' => 0];
+            foreach ($resellerNameToType as $type) {
+                if ($type === 'DEALER') {
+                    $categories['dealer']++;
+                } elseif ($type === 'DISTRIBUTOR') {
+                    $categories['distributor']++;
+                } else {
+                    $categories['end_user']++;
+                }
+            }
+
+            // Cards 3–6 — HR module penetration across the client portfolio.
+            $moduleKeywords = [
+                'TA' => ['TimeTec TA', 'TimeTec Attendance'],
+                'TL' => ['TimeTec Leave'],
+                'TC' => ['TimeTec Claim'],
+                'TP' => ['TimeTec Payroll'],
+            ];
+            $moduleLicenses = DB::connection('frontenddb')
+                ->table('crm_expiring_license')
+                ->whereIn('f_company_id', $clientCompanyIds)
+                ->where('f_expiry_date', '>=', $startDate)
+                ->where('f_expiry_date', '<=', $endDate)
+                ->where('f_type', 'PAID')
+                ->select('f_company_id', 'f_name', 'f_unit')
+                ->get();
+
+            $modules = [
+                'TA' => ['headcount' => 0, 'companies' => []],
+                'TL' => ['headcount' => 0, 'companies' => []],
+                'TC' => ['headcount' => 0, 'companies' => []],
+                'TP' => ['headcount' => 0, 'companies' => []],
+            ];
+            foreach ($moduleLicenses as $lic) {
+                foreach ($moduleKeywords as $key => $keywords) {
+                    foreach ($keywords as $kw) {
+                        if (str_contains($lic->f_name ?? '', $kw)) {
+                            $modules[$key]['headcount'] += (int) $lic->f_unit;
+                            $modules[$key]['companies'][$lic->f_company_id] = true;
+                            break 2;
+                        }
+                    }
+                }
+            }
+            foreach ($modules as $key => $m) {
+                $modules[$key]['companies'] = count($m['companies']);
+            }
+
+            return [
+                'categories' => $categories,
+                'modules' => $modules,
+            ];
+        } catch (\Exception $e) {
+            Log::error('Error fetching reseller currency summary: ' . $e->getMessage());
+            return $empty;
+        }
+    }
+
+    /**
+     * Group a reseller-data array (from getResellerData) into year-month buckets keyed by the
+     * Asia/Kuala_Lumpur calendar month of each reseller's earliest_expiry. Drives the Tier-1
+     * collapsible header rows above the reseller table. Mirrors Termination Analysis's grouping.
+     */
+    public function groupByYearMonth(array $rows): array
+    {
+        $grouped = [];
+        foreach ($rows as $row) {
+            $exp = $row['earliest_expiry'] ?? null;
+            if (!$exp) continue;
+            $dt = \Carbon\Carbon::parse($exp)->setTimezone('Asia/Kuala_Lumpur');
+            $key = $dt->format('Y-m');
+            if (!isset($grouped[$key])) {
+                $grouped[$key] = [
+                    'label' => $dt->format('Y') . ' - ' . $dt->format('F'),
+                    'year_month' => $key,
+                    'count' => 0,
+                    'total_hc' => 0,
+                    'total_forecast_cost' => 0,
+                    'resellers' => [],
+                ];
+            }
+            $grouped[$key]['count']++;
+            $grouped[$key]['total_hc'] += (int) ($row['total_hc'] ?? 0);
+            $grouped[$key]['total_forecast_cost'] += (int) ($row['total_forecast_cost'] ?? 0);
+            $grouped[$key]['resellers'][] = $row;
+        }
+        ksort($grouped);
+        return $grouped;
+    }
+
+    /**
+     * Union of year-month keys across MYR + USD groupings — used to default-expand every group
+     * on first load and after any filter change.
+     */
+    protected function collectAllGroupKeys(): array
+    {
+        return array_values(array_unique(array_merge(
+            array_keys($this->groupByYearMonth($this->myrData)),
+            array_keys($this->groupByYearMonth($this->usdData)),
+        )));
+    }
+
+    public function toggleYearMonth(string $yearMonth): void
+    {
+        if (in_array($yearMonth, $this->expandedYearMonths, true)) {
+            $this->expandedYearMonths = array_values(array_diff($this->expandedYearMonths, [$yearMonth]));
+        } else {
+            $this->expandedYearMonths[] = $yearMonth;
+        }
+    }
+
+    public function toggleResellerExpansion(string $resellerName, string $currency): void
+    {
+        $prop = $currency === 'USD' ? 'expandedResellersUsd' : 'expandedResellersMyr';
+        if (in_array($resellerName, $this->$prop, true)) {
+            $this->$prop = array_values(array_diff($this->$prop, [$resellerName]));
+        } else {
+            $this->$prop[] = $resellerName;
+        }
+    }
+
+    /**
+     * Slim sibling of openResellerDrawer — same first 3 queries (reseller-link IDs,
+     * MYR-override IDs, license sweep) but skips the per-client renewals lookup.
+     * Returns just enough for the inline expansion row (name + HC + forecast cost).
+     */
+    public function getResellerClientsCompact(string $resellerName, string $currency): array
+    {
+        try {
+            [$startDate, $endDate] = $this->getDateRange();
+
+            $companyIds = DB::connection('frontenddb')
+                ->table('crm_reseller_link')
+                ->where('reseller_name', $resellerName)
+                ->pluck('f_id')
+                ->toArray();
+            if (empty($companyIds)) return [];
+
+            $myrOverrideCompanyIds = DB::connection('frontenddb')
+                ->table('crm_reseller_link')
+                ->whereIn('reseller_id', self::$myrOverrideResellerIds)
+                ->pluck('f_id')
+                ->toArray();
+
+            $q = DB::connection('frontenddb')->table('crm_expiring_license')
+                ->whereIn('f_company_id', $companyIds)
+                ->where('f_expiry_date', '>=', $startDate)
+                ->where('f_expiry_date', '<=', $endDate);
+
+            if ($currency === 'MYR' && !empty($myrOverrideCompanyIds)) {
+                $q->where(function ($qq) use ($myrOverrideCompanyIds) {
+                    $qq->where('f_currency', 'MYR')->orWhereIn('f_company_id', $myrOverrideCompanyIds);
+                });
+            } elseif ($currency === 'USD' && !empty($myrOverrideCompanyIds)) {
+                $q->where('f_currency', 'USD')->whereNotIn('f_company_id', $myrOverrideCompanyIds);
+            } else {
+                $q->where('f_currency', $currency);
+            }
+            $q = $this->buildExclusionQuery($q);
+
+            $rows = $q->selectRaw('f_company_id, f_company_name, SUM(f_unit) as total_hc')
+                      ->groupBy('f_company_id', 'f_company_name')
+                      ->orderByDesc(DB::raw('SUM(f_unit)'))
+                      ->get();
+
+            return $rows->map(fn ($r) => [
+                'company_name' => $r->f_company_name,
+                'total_hc' => (int) $r->total_hc,
+                'total_forecast_cost' => (int) $r->total_hc * 12,
+            ])->toArray();
+        } catch (\Exception $e) {
+            Log::error('Error fetching compact reseller clients: ' . $e->getMessage());
             return [];
         }
     }
