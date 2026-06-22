@@ -38,6 +38,7 @@ class CompanyAccountSettingTab extends Component implements HasForms
     public ?int $referralId = null;
     public ?string $billingMethod = null;
     public ?int $salesPersonId = null;
+    public ?int $commissionRate = 30; // 0–100, percentage; default 30%
 
     public function mount(?int $softwareHandoverId = null, array $companyData = [])
     {
@@ -77,6 +78,14 @@ class CompanyAccountSettingTab extends Component implements HasForms
             $this->assignTargetType = 'distributor_v2';
             $this->assignTargetId = $distributorV2->id;
             $this->dealerId = $distributorV2->parent_reseller_id;
+        }
+
+        // Commission rate lives on the v2 records (decimal 5,2 stored as 0–100).
+        // Subscribers (SoftwareHandover) have no column — keep the 30 default.
+        if ($resellerV2 && $resellerV2->commission_rate !== null) {
+            $this->commissionRate = (int) $resellerV2->commission_rate;
+        } elseif ($distributorV2 && $distributorV2->commission_rate !== null) {
+            $this->commissionRate = (int) $distributorV2->commission_rate;
         }
     }
 
@@ -127,6 +136,28 @@ class CompanyAccountSettingTab extends Component implements HasForms
                 ->success()
                 ->send();
         }
+    }
+
+    public function updatedCommissionRate($value): void
+    {
+        $rate = (int) $value;
+
+        // Mirrors updatedDealerId's target resolution. Persists to v2 records that own
+        // the column; SoftwareHandover stays toast-only until its migration lands.
+        $record = match ($this->assignTargetType) {
+            'reseller_v2' => ResellerV2::find($this->assignTargetId),
+            'distributor_v2' => DistributorV2::find($this->assignTargetId),
+            default => null,
+        };
+
+        if ($record) {
+            $record->update(['commission_rate' => $rate]);
+        }
+
+        Notification::make()
+            ->title("Commission rate set to {$rate}%.")
+            ->success()
+            ->send();
     }
 
     public function updatedReferralId($value): void
