@@ -1018,18 +1018,50 @@ class ResellerAnalysis extends Page
             ];
         }
 
+        // Per-reseller breakdown — top 5 by HC + one Others bucket for the long tail.
+        // Resort: getResellerData() sorts by total_end_users (client count); the donut needs HC-weighted slices.
+        $sorted = $data;
+        usort($sorted, fn ($a, $b) => ($b['total_hc'] ?? 0) <=> ($a['total_hc'] ?? 0));
+        $topResellerColors = ['#2563eb', '#8b5cf6', '#f59e0b', '#10b981', '#ef4444'];
+        $topN = 5;
+        $topResellers = array_slice($sorted, 0, $topN);
+        $rest = array_slice($sorted, $topN);
+
+        $resellersOut = [];
+        foreach ($topResellers as $i => $r) {
+            $hc = (int) ($r['total_hc'] ?? 0);
+            $resellersOut[] = [
+                'name'      => $r['reseller_name'] ?? 'Unknown',
+                'headcount' => $hc,
+                'cost'      => $hc * $rate * $months,
+                'color'     => $topResellerColors[$i] ?? '#6b7280',
+            ];
+        }
+        if (!empty($rest)) {
+            $othersHc = (int) array_sum(array_column($rest, 'total_hc'));
+            $resellersOut[] = [
+                'name'      => 'Others (' . count($rest) . ')',
+                'headcount' => $othersHc,
+                'cost'      => $othersHc * $rate * $months,
+                'color'     => '#94a3b8',
+                'is_others' => true,
+            ];
+        }
+
         [$startDate, $endDate] = $this->getDateRange();
 
         $this->forecastData = [
-            'currency'  => $currency,
-            'symbol'    => $currency === 'USD' ? 'USD' : 'RM',
-            'headcount' => $headcount,
-            'rate'      => $rate,
-            'months'    => $months,
-            'total'     => $headcount * $rate * $months,
-            'modules'   => $modules,
-            'date_from' => \Carbon\Carbon::parse($startDate)->format('d M Y'),
-            'date_to'   => \Carbon\Carbon::parse($endDate)->format('d M Y'),
+            'currency'             => $currency,
+            'symbol'               => $currency === 'USD' ? 'USD' : 'RM',
+            'headcount'            => $headcount,
+            'rate'                 => $rate,
+            'months'               => $months,
+            'total'                => $headcount * $rate * $months,
+            'modules'              => $modules,
+            'resellers'            => $resellersOut,
+            'total_reseller_count' => count($sorted),
+            'date_from'            => \Carbon\Carbon::parse($startDate)->format('d M Y'),
+            'date_to'              => \Carbon\Carbon::parse($endDate)->format('d M Y'),
         ];
         $this->showForecastModal = true;
     }

@@ -2632,6 +2632,77 @@
                     </div>
                 </div>
 
+                {{-- By Reseller breakdown — top 5 by HC + Others bucket. --}}
+                @php
+                    $forecastResellers = $forecastData['resellers'] ?? [];
+                    $forecastResellerTotalHc = max(0, (int) array_sum(array_column($forecastResellers, 'headcount')));
+                    $forecastResellerCumulative = 0;
+                    $forecastResellerSegments = [];
+                    foreach ($forecastResellers as $idx => $r) {
+                        $pct = $forecastResellerTotalHc > 0 ? $r['headcount'] / $forecastResellerTotalHc : 0;
+                        $dash = $pct * $forecastCirc;
+                        $forecastResellerSegments[$idx] = [
+                            'dash'   => $dash,
+                            'offset' => -$forecastResellerCumulative,
+                            'pct'    => $pct,
+                        ];
+                        $forecastResellerCumulative += $dash;
+                    }
+                @endphp
+
+                @if (!empty($forecastResellers))
+                <div style="margin-top:6px; padding-top:14px; border-top:1px dashed #e5e7eb;">
+                    <div style="font-size:0.7rem; font-weight:700; color:#9ca3af; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:12px;">
+                        By Reseller
+                    </div>
+
+                    <div style="display:flex; align-items:center; gap:18px;">
+                        {{-- Donut --}}
+                        <div style="position:relative; flex-shrink:0; width:128px; height:128px;">
+                            <svg width="128" height="128" viewBox="0 0 120 120" style="display:block;">
+                                <circle cx="60" cy="60" r="50" fill="none" stroke="#f1f5f9" stroke-width="18"/>
+                                <g transform="rotate(-90 60 60)">
+                                    @foreach ($forecastResellers as $idx => $r)
+                                        @if ($forecastResellerSegments[$idx]['pct'] > 0)
+                                            <circle cx="60" cy="60" r="50" fill="none"
+                                                stroke="{{ $r['color'] }}"
+                                                stroke-width="18"
+                                                stroke-dasharray="{{ $forecastResellerSegments[$idx]['dash'] }} {{ $forecastCirc - $forecastResellerSegments[$idx]['dash'] }}"
+                                                stroke-dashoffset="{{ $forecastResellerSegments[$idx]['offset'] }}"/>
+                                        @endif
+                                    @endforeach
+                                </g>
+                            </svg>
+                            <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; pointer-events:none;">
+                                <span style="font-size:0.55rem; font-weight:700; color:#9ca3af; letter-spacing:0.1em;">RESELLERS</span>
+                                <span style="font-size:1.1rem; font-weight:800; color:#1f2937; line-height:1.1; margin-top:2px;">{{ number_format($forecastData['total_reseller_count'] ?? 0) }}</span>
+                            </div>
+                        </div>
+
+                        {{-- Legend --}}
+                        <div style="display:flex; flex-direction:column; gap:9px; flex:1; min-width:0;">
+                            @foreach ($forecastResellers as $idx => $r)
+                                <div style="display:flex; align-items:flex-start; gap:8px; font-size:0.8rem;">
+                                    <span style="width:9px; height:9px; border-radius:9999px; background:{{ $r['color'] }}; margin-top:5px; flex-shrink:0;"></span>
+                                    <div style="flex:1; min-width:0;">
+                                        <div style="display:flex; justify-content:space-between; align-items:baseline; gap:6px;">
+                                            <span style="font-weight:600; color:#1f2937; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;">{{ $r['name'] }}</span>
+                                            <span style="font-weight:600; color:#1f2937; white-space:nowrap;">{{ $forecastSymbol }} {{ number_format($r['cost'], 2) }}</span>
+                                        </div>
+                                        <div style="font-size:0.7rem; color:#9ca3af; margin-top:1px;">
+                                            {{ number_format($r['headcount']) }} HC
+                                            @if ($forecastResellerTotalHc > 0)
+                                                <span style="color:#cbd5e1;">·</span> {{ number_format($forecastResellerSegments[$idx]['pct'] * 100, 1) }}%
+                                            @endif
+                                        </div>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                </div>
+                @endif
+
                 <hr style="border:none; border-top:1px solid #e5e7eb; margin:6px 0;">
                 <div style="display:flex; justify-content:space-between; font-size:1rem;">
                     <span style="font-weight:700; color:#1f2937;">Total Forecast Cost</span>
