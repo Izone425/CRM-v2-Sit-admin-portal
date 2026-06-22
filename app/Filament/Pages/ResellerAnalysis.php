@@ -38,6 +38,10 @@ class ResellerAnalysis extends Page
     public array $expandedResellersMyr = [];
     public array $expandedResellersUsd = [];
 
+    // Generate Forecast Cost modal — mirrors Termination Analysis's centered modal.
+    public bool $showForecastModal = false;
+    public array $forecastData = [];
+
     // Date range selector — mirrors Termination Analysis / Renewal Process Data tabs.
     public string $filterMode = 'all';
     public string $selectedYear = '';
@@ -989,6 +993,50 @@ class ResellerAnalysis extends Page
         } else {
             $this->$prop[] = $resellerName;
         }
+    }
+
+    /**
+     * Build the forecast snapshot for the active currency tab and open the modal.
+     * Pure aggregation over already-hydrated $myrData / $usdData + $myrSummary / $usdSummary —
+     * no extra queries. Mirrors TerminationAnalysis::generateForecastCost() (RM 1 × 12 months).
+     */
+    public function generateForecastCost(string $currency): void
+    {
+        $data    = $currency === 'USD' ? $this->usdData    : $this->myrData;
+        $summary = $currency === 'USD' ? $this->usdSummary : $this->myrSummary;
+
+        $headcount = (int) array_sum(array_column($data, 'total_hc'));
+        $rate      = 1;
+        $months    = 12;
+
+        $modules = [];
+        foreach (['TA', 'TL', 'TC', 'TP'] as $key) {
+            $modHc = (int) ($summary['modules'][$key]['headcount'] ?? 0);
+            $modules[$key] = [
+                'headcount' => $modHc,
+                'cost'      => $modHc * $rate * $months,
+            ];
+        }
+
+        [$startDate, $endDate] = $this->getDateRange();
+
+        $this->forecastData = [
+            'currency'  => $currency,
+            'symbol'    => $currency === 'USD' ? 'USD' : 'RM',
+            'headcount' => $headcount,
+            'rate'      => $rate,
+            'months'    => $months,
+            'total'     => $headcount * $rate * $months,
+            'modules'   => $modules,
+            'date_from' => \Carbon\Carbon::parse($startDate)->format('d M Y'),
+            'date_to'   => \Carbon\Carbon::parse($endDate)->format('d M Y'),
+        ];
+        $this->showForecastModal = true;
+    }
+
+    public function closeForecastModal(): void
+    {
+        $this->showForecastModal = false;
     }
 
     /**
