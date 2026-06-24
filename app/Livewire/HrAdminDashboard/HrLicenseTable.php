@@ -245,24 +245,24 @@ class HrLicenseTable extends Component implements HasForms, HasTable
                 TextColumn::make('license_category')
                     ->label('Category')
                     ->sortable()
-                    ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'Subscriber' => 'gray',
-                        'Reseller' => 'info',
-                        'Distributor' => 'purple',
-                        default => 'gray',
+                    ->formatStateUsing(fn (?string $state): string => match ($state) {
+                        'Distributor' => '<span style="display:inline-flex;align-items:center;padding:3px 12px;border-radius:9999px;font-size:0.75rem;font-weight:600;background:#86efac;color:#166534;">Distributor</span>',
+                        'Reseller'    => '<span style="display:inline-flex;align-items:center;padding:3px 12px;border-radius:9999px;font-size:0.75rem;font-weight:600;background:#fde047;color:#854d0e;">Reseller</span>',
+                        'Subscriber'  => '<span style="display:inline-flex;align-items:center;padding:3px 12px;border-radius:9999px;font-size:0.75rem;font-weight:600;background:#3b82f6;color:#ffffff;">Subscriber</span>',
+                        default       => $state ? '<span style="color:#6b7280;">' . e($state) . '</span>' : '',
                     })
+                    ->html()
                     ->toggleable(),
 
                 TextColumn::make('status')
                     ->label('Status')
                     ->sortable()
-                    ->badge()
-                    ->color(fn (string $state): string => match ($state) {
-                        'Enabled' => 'success',
-                        'Disabled' => 'danger',
-                        default => 'gray',
+                    ->formatStateUsing(fn (?string $state): string => match ($state) {
+                        'Enabled'  => '<span style="display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:9999px;font-size:0.75rem;font-weight:600;background:#dcfce7;color:#15803d;"><span style="width:8px;height:8px;border-radius:50%;background:#22c55e;flex-shrink:0;"></span>Enabled</span>',
+                        'Disabled' => '<span style="display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:9999px;font-size:0.75rem;font-weight:600;background:#fef2f2;color:#dc2626;"><span style="width:8px;height:8px;border-radius:50%;background:#ef4444;flex-shrink:0;"></span>Disabled</span>',
+                        default    => $state ? '<span style="color:#6b7280;">' . e($state) . '</span>' : '',
                     })
+                    ->html()
                     ->toggleable(),
 
                 // Hidden by default (toggleable)
