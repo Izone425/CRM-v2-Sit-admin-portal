@@ -2299,87 +2299,9 @@ class ImplementerActions
                 Hidden::make('scheduler_type')
                     ->default('instant'),
 
-                // ✅ Enhanced file attachment section - EXACTLY same as RelationManager
+                // Session Recordings (Project Plan Files dropdown removed — see sibling RelationManager file for matching edit).
                 Grid::make(2)
                     ->schema([
-                        Select::make('project_plan_files')
-                            ->label('Project Plan Files (from Storage)')
-                            ->options(function (ImplementerAppointment $record) {
-                                // Get lead from the record
-                                $lead = $record->lead;
-                                if (!$lead) {
-                                    return [];
-                                }
-
-                                $companyName = $lead->companyDetail?->company_name ?? 'Unknown';
-                                $companySlug = \Illuminate\Support\Str::slug($companyName);
-
-                                $files = \Illuminate\Support\Facades\Storage::disk('public')
-                                    ->files('project-plans');
-
-                                $matchingFiles = [];
-                                foreach ($files as $file) {
-                                    if (str_contains($file, $companySlug)) {
-                                        $fullPath = storage_path('app/public/' . $file);
-                                        $matchingFiles[] = [
-                                            'path' => $file,
-                                            'name' => basename($file),
-                                            'modified' => file_exists($fullPath) ? filemtime($fullPath) : 0
-                                        ];
-                                    }
-                                }
-
-                                usort($matchingFiles, function($a, $b) {
-                                    return $b['modified'] - $a['modified'];
-                                });
-
-                                $options = [];
-                                foreach ($matchingFiles as $file) {
-                                    $label = $file['name'];
-                                    if (isset($matchingFiles[0]) && $file['path'] === $matchingFiles[0]['path']) {
-                                        $label .= ' (Latest)';
-                                    }
-                                    $options[$file['path']] = $label;
-                                }
-
-                                return $options;
-                            })
-                            ->default(function (ImplementerAppointment $record) {
-                                // Get lead from the record
-                                $lead = $record->lead;
-                                if (!$lead) {
-                                    return null;
-                                }
-
-                                $companyName = $lead->companyDetail?->company_name ?? 'Unknown';
-                                $companySlug = \Illuminate\Support\Str::slug($companyName);
-
-                                $files = \Illuminate\Support\Facades\Storage::disk('public')
-                                    ->files('project-plans');
-
-                                $matchingFiles = [];
-                                foreach ($files as $file) {
-                                    if (str_contains($file, $companySlug)) {
-                                        $fullPath = storage_path('app/public/' . $file);
-                                        $matchingFiles[] = [
-                                            'path' => $file,
-                                            'modified' => file_exists($fullPath) ? filemtime($fullPath) : 0
-                                        ];
-                                    }
-                                }
-
-                                usort($matchingFiles, function($a, $b) {
-                                    return $b['modified'] - $a['modified'];
-                                });
-
-                                return !empty($matchingFiles) ? [$matchingFiles[0]['path']] : null;
-                            })
-                            ->multiple()
-                            ->searchable()
-                            ->preload()
-                            ->helperText('Select existing project plan files from storage')
-                            ->columnSpan(1),
-
                         Placeholder::make('session_recordings')
                             ->label('Session Recordings')
                             ->content(function (ImplementerAppointment $record) {
@@ -2413,26 +2335,35 @@ class ImplementerActions
                                 $html = '<div class="space-y-3">';
 
                                 if (count($recordingLinks) === 1) {
-                                    // Single recording
+                                    // Single recording — header row with inline Copy Link button (no URL display).
+                                    // json_encode + htmlspecialchars makes the URL safe for both the HTML attribute and the JS string.
+                                    $jsUrl = htmlspecialchars(json_encode($recordingLinks[0]), ENT_QUOTES, 'UTF-8');
+
                                     $html .= '<div class="p-4 border border-green-200 rounded-lg bg-green-50">';
-                                    $html .= '<div class="flex items-center mb-2">';
-                                    $html .= '<svg class="w-5 h-5 mr-2 text-green-500" fill="currentColor" viewBox="0 0 20 20">';
-                                    $html .= '<path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z"></path>';
-                                    $html .= '</svg>';
-                                    $html .= '<span class="font-medium text-green-800">Recording Available</span>';
-                                    $html .= '</div>';
-
-                                    $html .= '<div class="space-y-2">';
-                                    $html .= '<a href="' . htmlspecialchars($recordingLinks[0]) . '" target="_blank" style="display:inline-flex;align-items:center;padding:0.5rem 0.75rem;font-size:0.875rem;font-weight:500;line-height:1rem;color:#ffffff;background-color:#2563eb;border:1px solid transparent;border-radius:0.375rem;text-decoration:none;" onmouseover="this.style.backgroundColor=\'#1d4ed8\'" onmouseout="this.style.backgroundColor=\'#2563eb\'">';
-                                    $html .= '<svg style="width:1rem;height:1rem;margin-right:0.5rem;" fill="none" stroke="currentColor" viewBox="0 0 24 24">';
-                                    $html .= '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h1m4 0h1m-6 4h8a2 2 0 002-2V8a2 2 0 00-2-2H8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>';
-                                    $html .= '</svg>';
-                                    $html .= 'View Recording';
-                                    $html .= '</a>';
-
-                                    // Show truncated URL for reference
-                                    $truncatedUrl = strlen($recordingLinks[0]) > 60 ? substr($recordingLinks[0], 0, 60) . '...' : $recordingLinks[0];
-                                    $html .= '<div class="text-xs text-gray-600 break-all">' . htmlspecialchars($truncatedUrl) . '</div>';
+                                    $html .= '<div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">';
+                                    $html .=     '<div style="display:flex; align-items:center;">';
+                                    $html .=         '<svg class="w-5 h-5 mr-2 text-green-500" fill="currentColor" viewBox="0 0 20 20">';
+                                    $html .=             '<path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z"></path>';
+                                    $html .=         '</svg>';
+                                    $html .=         '<span class="font-medium text-green-800">Recording Available</span>';
+                                    $html .=     '</div>';
+                                    $html .=     '<button type="button"';
+                                    $html .=         ' x-data="{ copied: false }"';
+                                    $html .=         ' x-on:click="navigator.clipboard.writeText(' . $jsUrl . '); copied = true; setTimeout(() => copied = false, 1500)"';
+                                    $html .=         ' x-bind:title="copied ? \'Copied!\' : \'Click to copy the link\'"';
+                                    $html .=         ' style="display:inline-flex; align-items:center; gap:6px; padding:6px 12px; font-size:0.8125rem; font-weight:600; color:#fff; background-color:#2563eb; border:none; border-radius:6px; cursor:pointer;"';
+                                    $html .=         ' onmouseover="this.style.backgroundColor=\'#1d4ed8\'"';
+                                    $html .=         ' onmouseout="this.style.backgroundColor=\'#2563eb\'">';
+                                    $html .=         '<span x-show="!copied">';
+                                    $html .=             'Recording Session 1';
+                                    $html .=         '</span>';
+                                    $html .=         '<span x-show="copied" x-cloak style="display:inline-flex; align-items:center; gap:6px;">';
+                                    $html .=             '<svg style="width:14px;height:14px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">';
+                                    $html .=                 '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>';
+                                    $html .=             '</svg>';
+                                    $html .=             'Copied!';
+                                    $html .=         '</span>';
+                                    $html .=     '</button>';
                                     $html .= '</div>';
                                     $html .= '</div>';
                                 } else {
@@ -2448,14 +2379,28 @@ class ImplementerActions
                                     $html .= '<div class="space-y-2">';
                                     foreach ($recordingLinks as $index => $link) {
                                         $partNumber = $index + 1;
+                                        // Per-Part Copy button — same JS-safe URL embedding pattern as the single-recording case.
+                                        $jsLink = htmlspecialchars(json_encode($link), ENT_QUOTES, 'UTF-8');
+
                                         $html .= '<div class="flex items-center justify-between p-2 bg-white border border-green-200 rounded">';
-                                        $html .= '<span class="text-sm font-medium text-gray-700">Part ' . $partNumber . '</span>';
-                                        $html .= '<a href="' . htmlspecialchars($link) . '" target="_blank" class="inline-flex items-center px-2 py-1 text-xs font-medium leading-4 text-blue-600 bg-blue-100 border border-transparent rounded hover:bg-blue-200">';
-                                        $html .= '<svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">';
-                                        $html .= '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>';
-                                        $html .= '</svg>';
-                                        $html .= 'Open';
-                                        $html .= '</a>';
+                                        $html .=     '<span class="text-sm font-medium text-gray-700">Part ' . $partNumber . '</span>';
+                                        $html .=     '<button type="button"';
+                                        $html .=         ' x-data="{ copied: false }"';
+                                        $html .=         ' x-on:click="navigator.clipboard.writeText(' . $jsLink . '); copied = true; setTimeout(() => copied = false, 1500)"';
+                                        $html .=         ' x-bind:title="copied ? \'Copied!\' : \'Click to copy the link\'"';
+                                        $html .=         ' style="display:inline-flex; align-items:center; gap:6px; padding:4px 10px; font-size:0.75rem; font-weight:600; color:#1d4ed8; background-color:#dbeafe; border:none; border-radius:4px; cursor:pointer;"';
+                                        $html .=         ' onmouseover="this.style.backgroundColor=\'#bfdbfe\'"';
+                                        $html .=         ' onmouseout="this.style.backgroundColor=\'#dbeafe\'">';
+                                        $html .=         '<span x-show="!copied">';
+                                        $html .=             'Recording Session ' . $partNumber;
+                                        $html .=         '</span>';
+                                        $html .=         '<span x-show="copied" x-cloak style="display:inline-flex; align-items:center; gap:4px;">';
+                                        $html .=             '<svg style="width:12px;height:12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">';
+                                        $html .=                 '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>';
+                                        $html .=             '</svg>';
+                                        $html .=             'Copied!';
+                                        $html .=         '</span>';
+                                        $html .=     '</button>';
                                         $html .= '</div>';
                                     }
                                     $html .= '</div>';
@@ -2466,7 +2411,7 @@ class ImplementerActions
 
                                 return new \Illuminate\Support\HtmlString($html);
                             })
-                            ->columnSpan(1),
+                            ->columnSpanFull(),
 
                         // ✅ Hidden field to store all recording links for email
                         Hidden::make('session_recording_link')
@@ -2474,113 +2419,89 @@ class ImplementerActions
                                 return $record->session_recording_link ?: null;
                             })
                             ->dehydrated(true),
-                        // TextInput::make('session_recording_link')
-                        //     ->label('Session Recording Link')
-                        //     ->placeholder('Recording Link Not Ready Yet')
-                        //     ->default(function (ImplementerAppointment $record) {
-                        //         return $record->session_recording_link ?: null;
-                        //     })
-                        //     ->disabled()
-                        //     ->dehydrated(true)
-                        //     ->helperText(fn (callable $get) =>
-                        //         empty($get('session_recording_link'))
-                        //             ? '⏳ Recording will be available after the meeting ends and is processed by Microsoft Teams (usually within 1-4 hours).'
-                        //             : '✅ Recording is ready'
-                        //     )
-                        //     ->suffixIcon(fn (callable $get) =>
-                        //         empty($get('session_recording_link'))
-                        //             ? 'heroicon-o-clock'
-                        //             : 'heroicon-o-check-circle'
-                        //     )
-                        //     ->suffixIconColor(fn (callable $get) =>
-                        //         empty($get('session_recording_link'))
-                        //             ? 'warning'
-                        //             : 'success'
-                        //     )
-                        //     ->columnSpan(1),
                     ]),
 
                 Fieldset::make('Email Details')
                     ->schema([
-                        TextInput::make('required_attendees')
-                            ->label('Required Attendees')
-                            ->default(function (ImplementerAppointment $record) {
-                                // Get lead from the record
-                                $lead = $record->lead;
-                                $emails = [];
-
-                                if ($lead) {
-                                    $softwareHandover = SoftwareHandover::where('lead_id', $lead->id)->latest()->first();
-
-                                    if ($softwareHandover && !empty($softwareHandover->implementation_pics) && is_string($softwareHandover->implementation_pics)) {
-                                        try {
-                                            $contacts = json_decode($softwareHandover->implementation_pics, true);
-
-                                            if (is_array($contacts)) {
-                                                foreach ($contacts as $contact) {
-                                                    if (!empty($contact['pic_email_impl'])) {
-                                                        $emails[] = $contact['pic_email_impl'];
-                                                    }
-                                                }
-                                            }
-                                        } catch (\Exception $e) {
-                                            Log::error('Error parsing implementation_pics JSON: ' . $e->getMessage());
-                                        }
-                                    }
-
-                                    if ($lead->companyDetail && !empty($lead->companyDetail->additional_pic)) {
-                                        try {
-                                            $additionalPics = json_decode($lead->companyDetail->additional_pic, true);
-
-                                            if (is_array($additionalPics)) {
-                                                foreach ($additionalPics as $pic) {
-                                                    if (
-                                                        !empty($pic['email']) &&
-                                                        isset($pic['status']) &&
-                                                        $pic['status'] === 'Available'
-                                                    ) {
-                                                        $emails[] = $pic['email'];
-                                                    }
-                                                }
-                                            }
-                                        } catch (\Exception $e) {
-                                            Log::error('Error parsing additional_pic JSON: ' . $e->getMessage());
-                                        }
-                                    }
-                                }
-
-                                $uniqueEmails = array_unique($emails);
-                                return !empty($uniqueEmails) ? implode(';', $uniqueEmails) : null;
-                            })
-                            ->required()
-                            ->helperText('Separate each email with a semicolon (e.g., email1;email2;email3).'),
-
-                        Select::make('email_template')
-                            ->label('Email Template')
-                            ->options(function () {
-                                return \App\Models\EmailTemplate::whereIn('type', ['implementer'])
-                                    ->pluck('name', 'id')
-                                    ->toArray();
-                            })
-                            ->searchable()
-                            ->preload()
-                            ->reactive()
-                            ->afterStateUpdated(function ($state, callable $set) {
-                                if ($state) {
-                                    $template = \App\Models\EmailTemplate::find($state);
-                                    if ($template) {
-                                        $set('email_subject', $template->subject);
-                                        $set('email_content', $template->content);
-                                    }
-                                }
-                            })
-                            ->required(),
-
-                        // ✅ ADDED: Same layout as RelationManager with onboarding file upload
+                        // All form fields stack in the left column so labels align;
+                        // Email Content fills the right column as a single tall block.
                         Grid::make(2)
                             ->schema([
                                 Grid::make(1)
                                     ->schema([
+                                        TextInput::make('required_attendees')
+                                            ->label('Required Attendees')
+                                            ->default(function (ImplementerAppointment $record) {
+                                                // Get lead from the record
+                                                $lead = $record->lead;
+                                                $emails = [];
+
+                                                if ($lead) {
+                                                    $softwareHandover = SoftwareHandover::where('lead_id', $lead->id)->latest()->first();
+
+                                                    if ($softwareHandover && !empty($softwareHandover->implementation_pics) && is_string($softwareHandover->implementation_pics)) {
+                                                        try {
+                                                            $contacts = json_decode($softwareHandover->implementation_pics, true);
+
+                                                            if (is_array($contacts)) {
+                                                                foreach ($contacts as $contact) {
+                                                                    if (!empty($contact['pic_email_impl'])) {
+                                                                        $emails[] = $contact['pic_email_impl'];
+                                                                    }
+                                                                }
+                                                            }
+                                                        } catch (\Exception $e) {
+                                                            Log::error('Error parsing implementation_pics JSON: ' . $e->getMessage());
+                                                        }
+                                                    }
+
+                                                    if ($lead->companyDetail && !empty($lead->companyDetail->additional_pic)) {
+                                                        try {
+                                                            $additionalPics = json_decode($lead->companyDetail->additional_pic, true);
+
+                                                            if (is_array($additionalPics)) {
+                                                                foreach ($additionalPics as $pic) {
+                                                                    if (
+                                                                        !empty($pic['email']) &&
+                                                                        isset($pic['status']) &&
+                                                                        $pic['status'] === 'Available'
+                                                                    ) {
+                                                                        $emails[] = $pic['email'];
+                                                                    }
+                                                                }
+                                                            }
+                                                        } catch (\Exception $e) {
+                                                            Log::error('Error parsing additional_pic JSON: ' . $e->getMessage());
+                                                        }
+                                                    }
+                                                }
+
+                                                $uniqueEmails = array_unique($emails);
+                                                return !empty($uniqueEmails) ? implode(';', $uniqueEmails) : null;
+                                            })
+                                            ->required(),
+
+                                        Select::make('email_template')
+                                            ->label('Email Template')
+                                            ->options(function () {
+                                                return \App\Models\EmailTemplate::whereIn('type', ['implementer'])
+                                                    ->pluck('name', 'id')
+                                                    ->toArray();
+                                            })
+                                            ->searchable()
+                                            ->preload()
+                                            ->reactive()
+                                            ->afterStateUpdated(function ($state, callable $set) {
+                                                if ($state) {
+                                                    $template = \App\Models\EmailTemplate::find($state);
+                                                    if ($template) {
+                                                        $set('email_subject', $template->subject);
+                                                        $set('email_content', $template->content);
+                                                    }
+                                                }
+                                            })
+                                            ->required(),
+
                                         TextInput::make('email_subject')
                                             ->label('Email Subject')
                                             ->required(),
@@ -2613,6 +2534,7 @@ class ImplementerActions
                                     ->disableToolbarButtons([
                                         'attachFiles',
                                     ])
+                                    ->extraInputAttributes(['style' => 'min-height: 560px;'])
                                     ->required()
                                     ->columnSpan(1),
                             ]),
@@ -2633,21 +2555,18 @@ class ImplementerActions
                 Hidden::make('implementer_email')
                     ->default(auth()->user()->email ?? ''),
 
-                RichEditor::make('notes')
+                // Plain Textarea (was RichEditor) — hard-capped to 3 lines via the
+                // x-on:keydown.enter handler below. Mirror this in the sibling
+                // RelationManager's add_session_follow_up action.
+                Textarea::make('notes')
                     ->label('Remarks')
-                    ->disableToolbarButtons([
-                        'attachFiles',
-                        'blockquote',
-                        'codeBlock',
-                        'h2',
-                        'h3',
-                        'link',
-                        'redo',
-                        'strike',
-                        'undo',
-                    ])
-                    ->extraInputAttributes(['style' => 'text-transform: uppercase'])
+                    ->rows(3)
+                    ->maxLength(500)
                     ->placeholder('Add your session summary details here...')
+                    ->extraInputAttributes([
+                        'style' => 'text-transform: uppercase; resize: none;',
+                        'x-on:keydown.enter' => "if (\$event.target.value.split('\\n').length >= 3) { \$event.preventDefault(); }",
+                    ])
                     ->required()
             ])
             ->action(function (array $data, ImplementerAppointment $record) {
