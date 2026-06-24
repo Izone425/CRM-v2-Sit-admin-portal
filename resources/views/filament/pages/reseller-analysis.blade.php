@@ -845,6 +845,29 @@
                 </div>
             </div>
 
+            {{-- Search bar — filters the reseller list + recomputes all summary cards (MYR tab) --}}
+            <div style="display:flex; align-items:center; gap:10px; margin-top:12px; margin-bottom:14px;">
+                <div style="position:relative; flex:1 1 320px; max-width:480px;">
+                    <svg xmlns="http://www.w3.org/2000/svg"
+                         style="position:absolute; left:10px; top:50%; transform:translateY(-50%); width:16px; height:16px; color:#9ca3af; pointer-events:none;"
+                         fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z"/>
+                    </svg>
+                    <input type="text"
+                           wire:model.live.debounce.500ms="searchMyr"
+                           placeholder="Search reseller name or account code"
+                           style="width:100%; padding:8px 12px 8px 34px; border:1px solid #d1d5db; border-radius:8px; font-size:0.875rem; background:#fff; outline:none;"
+                           onfocus="this.style.borderColor='#3b82f6'; this.style.boxShadow='0 0 0 3px rgba(59,130,246,0.15)';"
+                           onblur="this.style.borderColor='#d1d5db'; this.style.boxShadow='none';" />
+                </div>
+                @if ($searchMyr !== '')
+                    <span style="font-size:0.75rem; color:#6b7280;">
+                        Filtered by "<strong style="color:#111827;">{{ $searchMyr }}</strong>"
+                    </span>
+                @endif
+            </div>
+
             {{-- Summary cards — mirror Termination Analysis (date+totals / reseller type / 4 HR modules) --}}
             @php
                 $moduleColors = ['TA' => '#3b82f6', 'TL' => '#8b5cf6', 'TC' => '#f59e0b', 'TP' => '#10b981'];
@@ -878,14 +901,10 @@
                     <div style="display:flex; align-items:center; margin-top:8px; justify-content:space-around;">
                         <div style="text-align:center; flex:1;">
                             <span style="font-size:1.85rem; font-weight:700; color:#10b981;">{{ $myrSummary['categories']['end_user'] ?? 0 }}</span>
-                            <p style="font-size:0.7rem; color:#475569; margin:2px 0 0;">End User</p>
+                            <p style="font-size:0.7rem; color:#475569; margin:2px 0 0;">Reseller</p>
                         </div>
                         <div style="text-align:center; flex:1;">
-                            <span style="font-size:1.85rem; font-weight:700; color:#2563eb;">{{ $myrSummary['categories']['dealer'] ?? 0 }}</span>
-                            <p style="font-size:0.7rem; color:#475569; margin:2px 0 0;">Dealer</p>
-                        </div>
-                        <div style="text-align:center; flex:1;">
-                            <span style="font-size:1.85rem; font-weight:700; color:#7c3aed;">{{ $myrSummary['categories']['distributor'] ?? 0 }}</span>
+                            <span style="font-size:1.85rem; font-weight:700; color:#7c3aed;">{{ (int) ($myrSummary['categories']['dealer'] ?? 0) + (int) ($myrSummary['categories']['distributor'] ?? 0) }}</span>
                             <p style="font-size:0.7rem; color:#475569; margin:2px 0 0;">Distributor</p>
                         </div>
                     </div>
@@ -1146,6 +1165,29 @@
                 </div>
             </div>
 
+            {{-- Search bar — filters the reseller list + recomputes all summary cards (USD tab) --}}
+            <div style="display:flex; align-items:center; gap:10px; margin-top:12px; margin-bottom:14px;">
+                <div style="position:relative; flex:1 1 320px; max-width:480px;">
+                    <svg xmlns="http://www.w3.org/2000/svg"
+                         style="position:absolute; left:10px; top:50%; transform:translateY(-50%); width:16px; height:16px; color:#9ca3af; pointer-events:none;"
+                         fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z"/>
+                    </svg>
+                    <input type="text"
+                           wire:model.live.debounce.500ms="searchUsd"
+                           placeholder="Search reseller name or account code"
+                           style="width:100%; padding:8px 12px 8px 34px; border:1px solid #d1d5db; border-radius:8px; font-size:0.875rem; background:#fff; outline:none;"
+                           onfocus="this.style.borderColor='#3b82f6'; this.style.boxShadow='0 0 0 3px rgba(59,130,246,0.15)';"
+                           onblur="this.style.borderColor='#d1d5db'; this.style.boxShadow='none';" />
+                </div>
+                @if ($searchUsd !== '')
+                    <span style="font-size:0.75rem; color:#6b7280;">
+                        Filtered by "<strong style="color:#111827;">{{ $searchUsd }}</strong>"
+                    </span>
+                @endif
+            </div>
+
             {{-- Summary cards — mirror Termination Analysis (date+totals / reseller type / 4 HR modules) --}}
             @php
                 $moduleColors = ['TA' => '#3b82f6', 'TL' => '#8b5cf6', 'TC' => '#f59e0b', 'TP' => '#10b981'];
@@ -1179,14 +1221,10 @@
                     <div style="display:flex; align-items:center; margin-top:8px; justify-content:space-around;">
                         <div style="text-align:center; flex:1;">
                             <span style="font-size:1.85rem; font-weight:700; color:#10b981;">{{ $usdSummary['categories']['end_user'] ?? 0 }}</span>
-                            <p style="font-size:0.7rem; color:#475569; margin:2px 0 0;">End User</p>
+                            <p style="font-size:0.7rem; color:#475569; margin:2px 0 0;">Reseller</p>
                         </div>
                         <div style="text-align:center; flex:1;">
-                            <span style="font-size:1.85rem; font-weight:700; color:#2563eb;">{{ $usdSummary['categories']['dealer'] ?? 0 }}</span>
-                            <p style="font-size:0.7rem; color:#475569; margin:2px 0 0;">Dealer</p>
-                        </div>
-                        <div style="text-align:center; flex:1;">
-                            <span style="font-size:1.85rem; font-weight:700; color:#7c3aed;">{{ $usdSummary['categories']['distributor'] ?? 0 }}</span>
+                            <span style="font-size:1.85rem; font-weight:700; color:#7c3aed;">{{ (int) ($usdSummary['categories']['dealer'] ?? 0) + (int) ($usdSummary['categories']['distributor'] ?? 0) }}</span>
                             <p style="font-size:0.7rem; color:#475569; margin:2px 0 0;">Distributor</p>
                         </div>
                     </div>
@@ -2533,7 +2571,7 @@
     <div wire:click="closeForecastModal"
          style="position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:9999; display:flex; align-items:center; justify-content:center;">
         <div wire:click.stop
-             style="background:#fff; border-radius:12px; width:min(460px,92vw); padding:24px; box-shadow:0 20px 50px rgba(0,0,0,0.25);">
+             style="background:#fff; border-radius:12px; width:min(920px,95vw); padding:24px; box-shadow:0 20px 50px rgba(0,0,0,0.25);">
             <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px;">
                 <div>
                     <h3 style="font-size:1rem; font-weight:700; color:#1a56db; margin:0;">
@@ -2581,7 +2619,10 @@
                         $forecastCumulative += $dash;
                     }
                 @endphp
-                <div style="margin-top:6px; padding-top:14px; border-top:1px dashed #e5e7eb;">
+                {{-- Side-by-side wrapper for BY MODULE + BY RESELLER (wraps to stacked on narrow viewports). --}}
+                <div style="display:flex; flex-wrap:wrap; gap:24px; margin-top:6px; padding-top:14px; border-top:1px dashed #e5e7eb;">
+
+                <div style="flex:1 1 320px; min-width:0;">
                     <div style="font-size:0.7rem; font-weight:700; color:#9ca3af; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:12px;">
                         By Module
                     </div>
@@ -2651,7 +2692,7 @@
                 @endphp
 
                 @if (!empty($forecastResellers))
-                <div style="margin-top:6px; padding-top:14px; border-top:1px dashed #e5e7eb;">
+                <div style="flex:1 1 320px; min-width:0;">
                     <div style="font-size:0.7rem; font-weight:700; color:#9ca3af; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:12px;">
                         By Reseller
                     </div>
@@ -2702,6 +2743,8 @@
                     </div>
                 </div>
                 @endif
+
+                </div>  {{-- end side-by-side wrapper --}}
 
                 <hr style="border:none; border-top:1px solid #e5e7eb; margin:6px 0;">
                 <div style="display:flex; justify-content:space-between; font-size:1rem;">

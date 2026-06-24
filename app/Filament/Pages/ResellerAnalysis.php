@@ -51,6 +51,10 @@ class ResellerAnalysis extends Page
     public ?string $endDate = null;
     public array $availableYears = [];
 
+    // Per-tab reseller search — name + reseller code (Account column).
+    public string $searchMyr = '';
+    public string $searchUsd = '';
+
     // Reseller Commission tab — bucketed by max f_rate per reseller, per currency.
     public $commissionData = [];
 
@@ -656,6 +660,24 @@ class ResellerAnalysis extends Page
         $this->reloadResellerData();
     }
 
+    // Per-tab search hooks only rebuild the affected currency's data + summary —
+    // avoids re-running the USD path when typing in MYR (and vice versa).
+    public function updatedSearchMyr(): void
+    {
+        $this->myrData = $this->getResellerData('MYR');
+        $this->myrSummary = $this->getCurrencySummary('MYR');
+        $this->expandedYearMonths = $this->collectAllGroupKeys();
+        $this->expandedResellersMyr = [];
+    }
+
+    public function updatedSearchUsd(): void
+    {
+        $this->usdData = $this->getResellerData('USD');
+        $this->usdSummary = $this->getCurrencySummary('USD');
+        $this->expandedYearMonths = $this->collectAllGroupKeys();
+        $this->expandedResellersUsd = [];
+    }
+
     protected function reloadResellerData(): void
     {
         $this->myrData = $this->getResellerData('MYR');
@@ -697,14 +719,28 @@ class ResellerAnalysis extends Page
         try {
             [$startDate, $endDate] = $this->getDateRange();
 
+            $search = trim(match (strtoupper($currency)) {
+                'MYR' => $this->searchMyr,
+                'USD' => $this->searchUsd,
+                default => '',
+            });
+
             // Get all resellers with their companies
-            $resellers = DB::connection('frontenddb')
+            $resellersQ = DB::connection('frontenddb')
                 ->table('crm_reseller_link')
                 ->select('reseller_name', 'reseller_id', 'f_id')
                 ->whereNotNull('reseller_name')
-                ->where('reseller_name', '!=', '')
-                ->get()
-                ->groupBy('reseller_name');
+                ->where('reseller_name', '!=', '');
+
+            if ($search !== '') {
+                $needle = '%' . strtoupper($search) . '%';
+                $resellersQ->where(function ($q) use ($needle) {
+                    $q->whereRaw('UPPER(reseller_name) LIKE ?', [$needle])
+                      ->orWhereRaw('UPPER(reseller_id) LIKE ?', [$needle]);
+                });
+            }
+
+            $resellers = $resellersQ->get()->groupBy('reseller_name');
 
             $allCompanyIds = $resellers->flatten()->pluck('f_id')->unique()->toArray();
 
@@ -822,13 +858,28 @@ class ResellerAnalysis extends Page
         try {
             [$startDate, $endDate] = $this->getDateRange();
 
-            $resellers = DB::connection('frontenddb')
+            $search = trim(match (strtoupper($currency)) {
+                'MYR' => $this->searchMyr,
+                'USD' => $this->searchUsd,
+                default => '',
+            });
+
+            $resellersQ = DB::connection('frontenddb')
                 ->table('crm_reseller_link as rl')
                 ->leftJoin('crm_customer as r', 'rl.reseller_id', '=', 'r.company_id')
                 ->select('rl.reseller_name', 'rl.reseller_id', 'rl.f_id', 'r.f_company_type as reseller_type')
                 ->whereNotNull('rl.reseller_name')
-                ->where('rl.reseller_name', '!=', '')
-                ->get();
+                ->where('rl.reseller_name', '!=', '');
+
+            if ($search !== '') {
+                $needle = '%' . strtoupper($search) . '%';
+                $resellersQ->where(function ($q) use ($needle) {
+                    $q->whereRaw('UPPER(rl.reseller_name) LIKE ?', [$needle])
+                      ->orWhereRaw('UPPER(rl.reseller_id) LIKE ?', [$needle]);
+                });
+            }
+
+            $resellers = $resellersQ->get();
 
             $allCompanyIds = $resellers->pluck('f_id')->unique()->filter()->values()->toArray();
             if (empty($allCompanyIds)) {
